@@ -41,10 +41,14 @@ main {
 /* Styling for the link list */
 .link-list {
     list-style-type: none;
+    padding: 0;
+    display: flex; /* Use flexbox for horizontal layout */
+    justify-content: center; /* Center the buttons */
+    gap: 20px; /* Add space between the buttons */
 }
 
 .link-list li {
-    margin: 10px 0;
+    margin: 0;
 }
 
 /* Styling for the links */
@@ -52,9 +56,10 @@ main {
     text-decoration: none;
     color: #fff;
     background-color: #3498db;
-    padding: 10px 20px;
-    border-radius: 5px;
+    padding: 15px 25px; /* Increase padding for larger buttons */
+    border-radius: 10px; /* Make buttons rounder */
     transition: background-color 0.3s ease;
+    display: inline-block; /* Ensure buttons don't stretch across the whole line */
 }
 
 .link-btn:hover {
