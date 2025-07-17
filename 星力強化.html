@@ -86,7 +86,7 @@
 <input id="auto-from-star" type="number" min="0" max="28" value="0" class="border rounded w-20 px-2 py-1" />
 
 <label for="target-star" class="text-sm">目標星數：</label>
-    <input id="target-star" type="number" min="1" max="29" value="15" class="border rounded w-20 px-2 py-1" />
+    <input id="target-star" type="number" min="1" max="30" value="22" class="border rounded w-20 px-2 py-1" />
 
     <label class="flex items-center text-sm ml-4">
       <input type="checkbox" id="auto-safe" class="accent-yellow-500 mr-1" />啟動防爆（18星以下）
@@ -279,19 +279,27 @@ document.getElementById("simulate-auto").addEventListener("click", async () => {
   stopRequested = false; // 每次開始模擬重置停止旗標
 
   const fromStar = parseInt(document.getElementById("auto-from-star").value);
-  const targetStar = parseInt(document.getElementById("target-star").value);
-  const level = document.getElementById("auto-level-select").value;
+  const targetStar = parseInt(document.getElementById("target-star").value); 
+  const level = document.getElementById("auto-level-select").value;  // 裝備等級
   const isSafe = document.getElementById("auto-safe").checked;
   const stopOnBoom = document.querySelector('input[name="boom-mode"]:checked')?.value === "stop";
 
-  if (isNaN(fromStar) || isNaN(targetStar) || fromStar >= targetStar || fromStar < 0 || targetStar > 29) {
-    alert("請輸入有效的起始與目標星數（起始星數 < 目標星數，且 0～29）");
+  // 檢查裝備等級是否為 130，若是則限制最大星數為 20
+  if (level === "130" && targetStar > 20) {
+    alert("130等裝備最多只能強化到 20 星！");
+    document.getElementById("target-star").value = 20;  // 自動設置為 20
+    return; // 停止模擬
+  }
+
+  // 這裡將限制目標星數範圍設為 0 到 30
+  if (isNaN(fromStar) || isNaN(targetStar) || fromStar >= targetStar || fromStar < 0 || targetStar > 30) {
+    alert("請輸入有效的起始與目標星數（起始星數 < 目標星數，且 0～30）");
     return;
   }
 
   let star = fromStar;
   let totalCost = 0;
-  let success = 0, keep = 0, boom = 0;
+  let success = 0, keep = 0, boom = 0; // 記錄成功、維持、爆炸次數
 
   const updateAutoLog = (msg) => {
     const li = document.createElement("li");
@@ -312,18 +320,22 @@ document.getElementById("simulate-auto").addEventListener("click", async () => {
     if (roll < rate.success) {
       to = s + 1;
       result = "✅ 成功";
-      success++;
+      success++;  // 成功次數增加
+      document.getElementById("auto-success-count").textContent = success; // 更新成功次數
     } else if (roll < rate.success + rate.keep) {
       result = "🔁 維持";
-      keep++;
+      keep++;  // 維持次數增加
+      document.getElementById("auto-maintain-count").textContent = keep; // 更新維持次數
     } else if (isSafe && s <= 17) {
       result = "🛡️ 防爆";
     } else {
       result = "💥 爆炸";
       to = 12;
-      boom++;
+      boom++;  // 爆炸次數增加
+      document.getElementById("auto-destroy-count").textContent = boom; // 更新爆炸次數
     }
-    totalCost += cost;
+    totalCost += cost;  // 累計金額
+    document.getElementById("auto-coin-display").textContent = `💰 本次消耗楓幣：${totalCost.toLocaleString()}`; // 更新顯示
     updateAutoLog(`⭐ ${s} → ${to}：${result}`);
     return { to, result, cost };
   };
@@ -357,6 +369,8 @@ document.getElementById("reset-auto").addEventListener("click", () => {
   ["auto-success-count", "auto-maintain-count", "auto-destroy-count", "auto-total-cost"].forEach(id => document.getElementById(id).textContent = 0);
   document.getElementById("auto-log-list").innerHTML = "";
 });
+
+
 
 // ⏹️ 停止按鈕事件綁定
 document.getElementById("stop-auto").addEventListener("click", () => {
