@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>星力模擬器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+  <div class="max-w-2xl mx-auto p-4 space-y-4">
+    <h1 class="text-3xl font-bold text-center">🌟 星力模擬器</h1>
+
+    <div class="flex justify-center space-x-2">
+      <button id="tab-basic" class="bg-gray-300 hover:bg-gray-400 text-sm px-3 py-1 rounded">🔧 基本衝星</button>
+      <button id="tab-auto" class="bg-gray-300 hover:bg-gray-400 text-sm px-3 py-1 rounded">🚀 一鍵衝星</button>
+    </div>
+
+    <!-- 基本衝星面板 -->
+    <div id="basic-panel" class="bg-white rounded shadow p-4 space-y-4">
+      <div class="flex flex-wrap items-center gap-2">
+        <label for="level-select" class="text-sm">裝備等級：</label>
+        <select id="level-select" class="border rounded px-2 py-1">
+          <option value="130">130</option>
+          <option value="140">140</option>
+          <option value="150">150</option>
+          <option value="160">160</option>
+          <option value="200">200</option>
+          <option value="250">250</option>
+        </select>
+
+        <label for="from-star" class="text-sm">目前星數：</label>
+        <input id="from-star" type="number" min="0" max="29" value="0" class="border rounded w-20 px-2 py-1" />
+      </div>
+
+      <div id="rate-display" class="text-center text-sm text-gray-700">
+        成功率：- / 爆炸率：- / 維持率：-
+      </div>
+
+      <div class="flex flex-col items-center space-y-2 mt-2">
+        <div class="flex items-center">
+          <input id="basic-safe" type="checkbox" class="accent-yellow-500 mr-2">
+          <label for="basic-safe" class="text-sm">啟動防爆（僅限18星以下）</label>
+        </div>
+        <div class="flex gap-2">
+          <button id="simulate-once" class="bg-gray-700 hover:bg-gray-800 text-white font-semibold px-5 py-2 rounded">
+            🔘 衝一顆星
+          </button>
+          <button id="reset" class="bg-gray-300 hover:bg-gray-400 text-black font-semibold px-4 py-2 rounded">
+            重置星數
+          </button>
+        </div>
+      </div>
+
+      <div class="text-sm text-blue-800 text-center" id="coin-display">
+        💰 本次消耗楓幣：--
+      </div>
+
+      <div class="flex flex-col gap-2 text-sm text-left px-2">
+        <div>✅ 成功次數：<span id="success-count">0</span></div>
+        <div>🔁 維持次數：<span id="maintain-count">0</span></div>
+        <div>💥 爆炸次數：<span id="destroy-count">0</span></div>
+        <div>💰 累積花費：<span id="total-cost">0</span></div>
+      </div>
+
+      <div>
+        <h2 class="text-sm font-semibold">📋 操作紀錄：</h2>
+        <ul id="log-list" class="bg-gray-50 border rounded p-2 h-40 overflow-y-scroll text-sm space-y-1"></ul>
+      </div>
+    </div>
+
+    <!-- 一鍵衝星面板 -->
+<div id="auto-panel" class="bg-white rounded shadow p-4 space-y-4 hidden">
+  <h2 class="text-lg font-semibold text-center">🚀 一鍵衝星模擬</h2>
+
+  <div class="flex flex-wrap items-center gap-2 justify-center">
+    <label for="auto-level-select" class="text-sm">裝備等級：</label>
+    <select id="auto-level-select" class="border rounded px-2 py-1">
+      <option value="130">130</option>
+      <option value="140">140</option>
+      <option value="150">150</option>
+      <option value="160">160</option>
+      <option value="200">200</option>
+      <option value="250">250</option>
+    </select>
+    <label for="auto-from-star" class="text-sm">基礎星數：</label>
+<input id="auto-from-star" type="number" min="0" max="28" value="0" class="border rounded w-20 px-2 py-1" />
+
+<label for="target-star" class="text-sm">目標星數：</label>
+    <input id="target-star" type="number" min="1" max="29" value="15" class="border rounded w-20 px-2 py-1" />
+
+    <label class="flex items-center text-sm ml-4">
+      <input type="checkbox" id="auto-safe" class="accent-yellow-500 mr-1" />啟動防爆（18星以下）
+    </label>
+  </div>
+
+  <div class="flex items-center justify-center gap-4">
+    <label class="flex items-center text-sm">
+      <input type="radio" name="boom-mode" value="stop" checked class="mr-1" />爆炸後停止
+    </label>
+    <label class="flex items-center text-sm">
+      <input type="radio" name="boom-mode" value="continue" class="mr-1" />爆炸後繼續
+    </label>
+  </div>
+
+<div class="flex gap-2">
+  <button id="simulate-auto" class="bg-gray-700 hover:bg-gray-800 text-white font-semibold px-5 py-2 rounded">
+    🚀 開始模擬
+  </button>
+  <button id="stop-auto" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2 rounded">
+    ⏹️ 停止模擬
+  </button>
+  <button id="reset-auto" class="bg-gray-300 hover:bg-gray-400 text-black font-semibold px-4 py-2 rounded">
+    🔄 重置設定
+  </button>
+</div>
+
+
+  <div class="text-sm text-blue-800 text-center mt-2" id="auto-coin-display">
+    💰 本次消耗楓幣：--
+  </div>
+
+  <div class="flex flex-col gap-2 text-sm text-left px-2">
+    <div>✅ 成功次數：<span id="auto-success-count">0</span></div>
+    <div>🔁 維持次數：<span id="auto-maintain-count">0</span></div>
+    <div>💥 爆炸次數：<span id="auto-destroy-count">0</span></div>
+    <div>💰 累積花費：<span id="auto-total-cost">0</span></div>
+  </div>
+
+  <div>
+    <h2 class="text-sm font-semibold">📋 操作紀錄：</h2>
+    <ul id="auto-log-list" class="bg-gray-50 border rounded p-2 h-40 overflow-y-scroll text-sm space-y-1"></ul>
+  </div>
+</div>
+</div>
+  <script>
+    const rateTable = {
+      0: { success: 0.95, destroy: 0.0, keep: 0.05 },
+      1: { success: 0.9, destroy: 0.0, keep: 0.1 },
+      2: { success: 0.85, destroy: 0.0, keep: 0.15 },
+      3: { success: 0.85, destroy: 0.0, keep: 0.15 },
+      4: { success: 0.8, destroy: 0.0, keep: 0.2 },
+      5: { success: 0.75, destroy: 0.0, keep: 0.25 },
+      6: { success: 0.7, destroy: 0.0, keep: 0.3 },
+      7: { success: 0.65, destroy: 0.0, keep: 0.35 },
+      8: { success: 0.6, destroy: 0.0, keep: 0.4 },
+      9: { success: 0.55, destroy: 0.0, keep: 0.45 },
+      10: { success: 0.5, destroy: 0.0, keep: 0.5 },
+      11: { success: 0.45, destroy: 0.0, keep: 0.55 },
+      12: { success: 0.4, destroy: 0.0, keep: 0.6 },
+      13: { success: 0.35, destroy: 0.0, keep: 0.65 },
+      14: { success: 0.3, destroy: 0.0, keep: 0.7 },
+      15: { success: 0.3, destroy: 0.021, keep: 0.679 },
+      16: { success: 0.3, destroy: 0.021, keep: 0.679 },
+      17: { success: 0.15, destroy: 0.068, keep: 0.782 },
+      18: { success: 0.12, destroy: 0.082, keep: 0.798 },
+      19: { success: 0.1, destroy: 0.09, keep: 0.81 },
+      20: { success: 0.3, destroy: 0.105, keep: 0.595 },
+      21: { success: 0.2, destroy: 0.115, keep: 0.685 },
+      22: { success: 0.175, destroy: 0.1225, keep: 0.7025 },
+      23: { success: 0.085, destroy: 0.18, keep: 0.735 },
+      24: { success: 0.085, destroy: 0.18, keep: 0.735 },
+      25: { success: 0.08, destroy: 0.18, keep: 0.74 },
+      26: { success: 0.07, destroy: 0.186, keep: 0.744 },
+      27: { success: 0.05, destroy: 0.19, keep: 0.76 },
+      28: { success: 0.03, destroy: 0.194, keep: 0.776 },
+      29: { success: 0.01, destroy: 0.198, keep: 0.792 }
+    };
+
+    const costTable = {
+  0: {"130":62000,"140":77200,"150":94800,"160":114800,"200":223200,"250":435000},
+  1: {"130":123100,"140":153400,"150":188500,"160":228600,"200":445400,"250":869100},
+  2: {"130":184100,"140":229700,"150":282300,"160":342300,"200":667700,"250":1303100},
+  3: {"130":245100,"140":305900,"150":376000,"160":456100,"200":889900,"250":1737100},
+  4: {"130":306100,"140":382100,"150":469800,"160":569900,"200":1112100,"250":2171100},
+  5: {"130":367200,"140":458300,"150":563500,"160":683700,"200":1334300,"250":2605200},
+  6: {"130":428200,"140":534600,"150":657300,"160":797400,"200":1556600,"250":3039200},
+  7: {"130":489200,"140":610800,"150":751000,"160":911200,"200":1778800,"250":3473200},
+  8: {"130":550300,"140":687000,"150":844800,"160":1025000,"200":2001000,"250":3907300},
+  9: {"130":611300,"140":763200,"150":938500,"160":1138800,"200":2223200,"250":4341300},
+  10: {"130":2495300,"140":3116400,"150":3832800,"160":4651300,"200":9083700,"250":17740600},
+  11: {"130":5738100,"140":7166500,"150":8814200,"160":10697000,"200":20891500,"250":40802800},
+  12: {"130":10449700,"140":13051200,"150":16052200,"160":19481200,"200":38048200,"250":74312000},
+  13: {"130":17398100,"140":21729500,"150":26726100,"160":32435400,"200":63349500,"250":123728500},
+  14: {"130":30754400,"140":38411200,"150":47243900,"160":57336400,"200":111984100,"250":218718100},
+  15: {"130":19586000,"140":39138900,"150":48139000,"160":58422700,"200":114105800,"250":222861900},
+  16: {"130":23069100,"140":48020200,"150":59062500,"160":71679700,"200":139998700,"250":273213100},
+  17: {"130":26918600,"140":61272000,"150":75183000,"160":91244700,"200":171812700,"250":343860200},
+  18: {"130":31149300,"140":172905500,"150":212666000,"160":258095700,"200":504809500,"250":999688700},
+  19: {"130":35776100,"140":297882700,"150":366382500,"160":444652400,"200":868460800,"250":1696211100},
+  20: {"130":50974700,"140":62966400,"150":76090000,"160":90904000,"200":148612400,"250":387009800},
+  21: {"130":92474700,"140":113738800,"150":138036600,"160":160000000,"200":269601800,"250":438404000},
+  22: {"130":65166700,"140":80152000,"150":97274600,"160":110000000,"200":189988600,"250":494760300},
+  23: {"130":73102200,"140":89912300,"150":109120000,"160":123000000,"200":213124000,"250":555806000},
+  24: {"130":81620200,"140":100389000,"150":121834900,"160":137000000,"200":237957000,"250":619680000},
+  25: {"130":90737500,"140":111603000,"150":135444400,"160":152000000,"200":264539000,"250":688902000},
+  26: {"130":100471000,"140":123574700,"150":149973700,"160":168000000,"200":292916400,"250":762801400},
+  27: {"130":110837000,"140":136324400,"150":165447100,"160":185000000,"200":323138000,"250":841503600},
+  28: {"130":121851000,"140":149872300,"150":181889200,"160":203000000,"200":355251400,"250":925132300},
+  29: {"130":133531800,"140":164238100,"150":199324000,"160":222000000,"200":389303700,"250":1013810000}
+};
+
+    document.getElementById("tab-basic").addEventListener("click", () => {
+      document.getElementById("basic-panel").classList.remove("hidden");
+      document.getElementById("auto-panel").classList.add("hidden");
+    });
+    document.getElementById("tab-auto").addEventListener("click", () => {
+      document.getElementById("basic-panel").classList.add("hidden");
+      document.getElementById("auto-panel").classList.remove("hidden");
+    });
+
+    document.getElementById("simulate-once").addEventListener("click", () => {
+  const fromStar = parseInt(document.getElementById("from-star").value);
+  const level = document.getElementById("level-select").value;
+  if (level === "130" && fromStar >= 20) {
+    alert("130等裝備最多只能強化到 20 星！");
+    return;
+  }
+  const isSafe = document.getElementById("basic-safe").checked;
+  const rate = rateTable[fromStar];
+  if (!rate) return alert("無對應機率資料");
+
+  let cost = costTable[fromStar]?.[level] || 0;
+  if (isSafe && fromStar <= 17 && rate.destroy > 0) cost *= 2;
+
+  const roll = Math.random();
+  let result = "維持";
+  let toStar = fromStar;
+
+  if (roll < rate.success) {
+    result = "成功";
+    toStar = fromStar + 1;
+  } else if (roll < rate.success + rate.keep) {
+    result = "維持";
+  } else if (isSafe && fromStar <= 17) {
+    result = "防爆保護";
+  } else {
+    result = "爆炸";
+    toStar = 12;
+  }
+
+  document.getElementById("from-star").value = toStar;
+
+  const update = (id) => {
+    const span = document.getElementById(id);
+    span.textContent = parseInt(span.textContent) + 1;
+  };
+  if (result === "成功") update("success-count");
+  else if (result === "維持") update("maintain-count");
+  else if (result.includes("爆")) update("destroy-count");
+
+  const costSpan = document.getElementById("total-cost");
+  costSpan.textContent = parseInt(costSpan.textContent) + cost;
+  document.getElementById("coin-display").textContent = `💰 本次消耗楓幣：${cost.toLocaleString()}`;
+
+  const log = document.createElement("li");
+  log.textContent = `⭐ ${fromStar} → ${toStar}：${result}`;
+  document.getElementById("log-list").prepend(log);
+
+  document.getElementById("rate-display").textContent = `成功率：${(rate.success*100).toFixed(2)}% / 爆炸率：${(rate.destroy*100).toFixed(2)}% / 維持率：${(rate.keep*100).toFixed(2)}%`;
+});
+
+    document.getElementById("reset").addEventListener("click", () => {
+      document.getElementById("from-star").value = 0;
+      document.getElementById("coin-display").textContent = "💰 本次消耗楓幣：--";
+      ["success-count", "maintain-count", "destroy-count", "total-cost"].forEach(id => document.getElementById(id).textContent = 0);
+      document.getElementById("log-list").innerHTML = "";
+      document.getElementById("rate-display").textContent = "成功率：- / 爆炸率：- / 維持率：-";
+    });
+  </script>
+  
+<script>
+// ⏳ 延遲工具函式
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+let stopRequested = false;  // 新增停止旗標
+
+// 🚀 一鍵衝星開始模擬（延遲版）
+document.getElementById("simulate-auto").addEventListener("click", async () => {
+  stopRequested = false; // 每次開始模擬重置停止旗標
+
+  const fromStar = parseInt(document.getElementById("auto-from-star").value);
+  const targetStar = parseInt(document.getElementById("target-star").value);
+  const level = document.getElementById("auto-level-select").value;
+  const isSafe = document.getElementById("auto-safe").checked;
+  const stopOnBoom = document.querySelector('input[name="boom-mode"]:checked')?.value === "stop";
+
+  if (isNaN(fromStar) || isNaN(targetStar) || fromStar >= targetStar || fromStar < 0 || targetStar > 29) {
+    alert("請輸入有效的起始與目標星數（起始星數 < 目標星數，且 0～29）");
+    return;
+  }
+
+  let star = fromStar;
+  let totalCost = 0;
+  let success = 0, keep = 0, boom = 0;
+
+  const updateAutoLog = (msg) => {
+    const li = document.createElement("li");
+    li.textContent = msg;
+    document.getElementById("auto-log-list").prepend(li);
+  };
+
+  const getNext = (s) => {
+    const rate = rateTable[s];
+    if (!rate) return { to: s, result: "❓ 無資料", cost: 0 };
+
+    let cost = costTable[s]?.[level] || 0;
+    if (isSafe && s <= 17 && rate.destroy > 0) cost *= 2;
+
+    const roll = Math.random();
+    let to = s;
+    let result;
+    if (roll < rate.success) {
+      to = s + 1;
+      result = "✅ 成功";
+      success++;
+    } else if (roll < rate.success + rate.keep) {
+      result = "🔁 維持";
+      keep++;
+    } else if (isSafe && s <= 17) {
+      result = "🛡️ 防爆";
+    } else {
+      result = "💥 爆炸";
+      to = 12;
+      boom++;
+    }
+    totalCost += cost;
+    updateAutoLog(`⭐ ${s} → ${to}：${result}`);
+    return { to, result, cost };
+  };
+
+  // 🌟 節奏控制模擬
+  while (star < targetStar) {
+    if (stopRequested) {
+      updateAutoLog("🛑 模擬已停止");
+      break;
+    }
+    const { to, result } = getNext(star);
+    if (result.includes("爆炸") && stopOnBoom) break;
+    star = to;
+    await delay(50); // 每次模擬間隔 50ms，防止瀏覽器當機
+  }
+
+  // 統計結果顯示
+  document.getElementById("auto-coin-display").textContent = `💰 本次消耗楓幣：${totalCost.toLocaleString()}`;
+  document.getElementById("auto-success-count").textContent = success;
+  document.getElementById("auto-maintain-count").textContent = keep;
+  document.getElementById("auto-destroy-count").textContent = boom;
+  document.getElementById("auto-total-cost").textContent = totalCost;
+});
+
+// 🔁 重置一鍵衝星設定
+document.getElementById("reset-auto").addEventListener("click", () => {
+  stopRequested = false; // 重置停止旗標
+  document.getElementById("auto-from-star").value = 0;
+  document.getElementById("target-star").value = 15;
+  document.getElementById("auto-coin-display").textContent = "💰 本次消耗楓幣：--";
+  ["auto-success-count", "auto-maintain-count", "auto-destroy-count", "auto-total-cost"].forEach(id => document.getElementById(id).textContent = 0);
+  document.getElementById("auto-log-list").innerHTML = "";
+});
+
+// ⏹️ 停止按鈕事件綁定
+document.getElementById("stop-auto").addEventListener("click", () => {
+  stopRequested = true;
+});
+</script>
+
+
+
+  
+</body>
+</html>
+
