@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>抽卡系統 - 皇家美容院</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-b from-gray-900 to-gray-800 text-white min-h-screen flex items-center justify-center">
+
+  <div class="bg-gray-700 p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-6 text-center">
+    <h1 class="text-3xl font-bold text-yellow-300">🌠 皇家美容院</h1>
+
+    <div class="flex justify-center space-x-4">
+      <button onclick="selectGender('male')" id="maleBtn" class="px-4 py-2 rounded-full border border-white hover:bg-blue-600 transition">♂ 男性</button>
+      <button onclick="selectGender('female')" id="femaleBtn" class="px-4 py-2 rounded-full border border-white hover:bg-pink-600 transition">♀ 女性</button>
+    </div>
+
+    <div class="flex justify-center space-x-4">
+      <button onclick="selectFunction('hair')" class="px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-700 transition">✨ 皇家美髮</button>
+      <button onclick="selectFunction('surgery')" class="px-4 py-2 rounded-full bg-yellow-500 hover:bg-yellow-600 transition">💎 皇家整形</button>
+    </div>
+
+    <div class="flex justify-center space-x-4">
+      <button onclick="drawSingle()" class="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 transition">🎲 單抽</button>
+      <button onclick="clearHistory()" class="px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 transition">🧹 清除紀錄</button>
+    </div>
+
+    <!-- 美髮顯示區 -->
+    <div id="hairSection" class="pt-4 text-sm text-gray-300 hidden">
+      <div>累積抽卡數量（美髮）：<span id="totalDraws">0</span></div>
+      <div>抽到主1頭髮數量（美髮）：<span id="totalSSSItems">0</span> (<span id="hairSSSChance">0%</span>)</div>
+      <div>抽到主2頭髮數量（美髮）：<span id="totalSSItems">0</span> (<span id="hairSSChance">0%</span>)</div>
+      <div>抽到主3頭髮數量（美髮）：<span id="totalSItems">0</span> (<span id="hairSChance">0%</span>)</div>
+      <div>抽到主4頭髮數量（美髮）：<span id="totalAItems">0</span> (<span id="hairAChance">0%</span>)</div>
+      <div id="hiddenBItems" class="hidden">抽到B級道具數量（美髮）：<span id="totalBItems">0</span> (<span id="hairBChance">0%</span>)</div>
+      <div id="hiddenCItems" class="hidden">抽到C級道具數量（美髮）：<span id="totalCItems">0</span> (<span id="hairCChance">0%</span>)</div>
+    </div>
+
+    <!-- 整形顯示區 -->
+    <div id="surgerySection" class="pt-4 text-sm text-gray-300 hidden">
+      <div>累積抽卡數量（整形）：<span id="totalDrawsSurgery">0</span></div>
+      <div>抽到主1眼睛數量（整形）：<span id="totalSSSItemsSurgery">0</span> (<span id="surgerySSSChance">0%</span>)</div>
+      <div>抽到主2眼睛數量（整形）：<span id="totalSSItemsSurgery">0</span> (<span id="surgerySSChance">0%</span>)</div>
+      <div>抽到主3眼睛數量（整形）：<span id="totalSItemsSurgery">0</span> (<span id="surgerySChance">0%</span>)</div>
+      <div>抽到主眼睛數量（整形）：<span id="totalAItemsSurgery">0</span> (<span id="surgeryAChance">0%</span>)</div>
+    </div>
+
+    <div id="history" class="pt-4 text-sm text-gray-300 max-h-96 overflow-y-auto space-y-2">
+      <div class="font-bold text-white">抽取紀錄</div>
+    </div>
+  </div>
+
+  <script>
+    let gender = null;
+    let functionType = null;
+    let totalDraws = 0;
+    let totalSSSItems = 0, totalSSItems = 0, totalSItems = 0, totalAItems = 0, totalBItems = 0, totalCItems = 0;
+    let totalDrawsSurgery = 0;
+    let totalSSSItemsSurgery = 0, totalSSItemsSurgery = 0, totalSItemsSurgery = 0, totalAItemsSurgery = 0;
+    let history = [];
+
+    // 美髮道具數據（包括男性和女性的道具數據）
+    const hairItems = [
+      { name: "黑色迷霧安傑洛髮型", type: "SSS", chance: 0.75, gender: "male" },
+      { name: "黑色閃閃亮晶晶髮型", type: "SS", chance: 0.75, gender: "male" },
+      { name: "黑色葡萄味髮型", type: "S", chance: 0.75, gender: "male" },
+      { name: "黑色白晝濃霧髮型", type: "A", chance: 0.75, gender: "male" },
+      { name: "黑色優質男友造型", type: "B", chance: 7.50, gender: "male" },
+      { name: "黑色冰霧造型", type: "B", chance: 7.50, gender: "male" },
+      { name: "黑色迪倫頭", type: "B", chance: 7.50, gender: "male" },
+      { name: "黑色四方刺刺髮型", type: "B", chance: 7.50, gender: "male" },
+      { name: "黑色火焰瀏海造型", type: "C", chance: 16.75, gender: "male" },
+      { name: "黑色哈密瓜造型", type: "C", chance: 16.75, gender: "male" },
+      { name: "黑色蓋頭蓋臉造型", type: "C", chance: 16.75, gender: "male" },
+      { name: "黑色梅杜莎造型", type: "C", chance: 16.75, gender: "male" },
+
+      { name: "黑色迷霧安潔拉髮型", type: "SSS", chance: 0.75, gender: "female" },
+      { name: "黑色閃亮亮潤彩髮型", type: "SS", chance: 0.75, gender: "female" },
+      { name: "黑色濃霧艾羅迪髮型", type: "S", chance: 0.75, gender: "female" },
+      { name: "黑色亮澤髮型", type: "A", chance: 0.75, gender: "female" },
+      { name: "黑色悠娜造形", type: "B", chance: 7.50, gender: "female" },
+      { name: "黑色紀念日髮型", type: "B", chance: 7.50, gender: "female" },
+      { name: "黑色超長波浪造型", type: "B", chance: 7.50, gender: "female" },
+      { name: "黑色蝴蝶花造型", type: "B", chance: 7.50, gender: "female" },
+      { name: "黑色澎澎尾捲造型", type: "C", chance: 16.75, gender: "female" },
+      { name: "黑色輕盈雙辮造型", type: "C", chance: 16.75, gender: "female" },
+      { name: "黑色蝴蝶少女造型", type: "C", chance: 16.75, gender: "female" },
+      { name: "黑色丹妮卡造型", type: "C", chance: 16.75, gender: "female" }
+    ];
+
+    // 整形道具數據
+    const surgeryItems = [
+      { name: "安潔拉臉型", type: "SSS", chance: 1.67, gender: "female" },
+      { name: "那個…那個…臉型(黑色瞳)", type: "SS", chance: 1.67, gender: "female" },
+      { name: "霧雨臉型", type: "S", chance: 1.67, gender: "female" },
+      { name: "黑色水汪汪臉型", type: "B", chance: 10.55, gender: "female" },
+      { name: "黑色明亮的臉型", type: "B", chance: 10.55, gender: "female" },
+      { name: "黑色很叛逆臉型", type: "B", chance: 10.55, gender: "female" },
+      { name: "黑色乖女孩臉型", type: "B", chance: 10.55, gender: "female" },
+      { name: "黑色聰明的臉型", type: "B", chance: 10.55, gender: "female" },
+      { name: "黑色扁嘴的臉型", type: "B", chance: 10.55, gender: "female" },
+
+      { name: "黑色卡頓整形", type: "B", chance: 10.55, gender: "female" },
+      { name: "黑色超新星臉型", type: "B", chance: 10.55, gender: "female" },
+      { name: "黑色清秀臉形", type: "B", chance: 10.55, gender: "female" },
+
+      { name: "安傑洛臉型", type: "SSS", chance: 1.67, gender: "male" },
+      { name: "那個…那個…臉型(黑色瞳)", type: "SS", chance: 1.67, gender: "male" },
+      { name: "霧雨臉型", type: "S", chance: 1.67, gender: "male" },
+      { name: "黑色很搶眼臉型", type: "B", chance: 10.55, gender: "male" },
+      { name: "黑色明亮的臉型", type: "B", chance: 10.55, gender: "male" },
+      { name: "黑色很叛逆臉型", type: "B", chance: 10.55, gender: "male" },
+      { name: "黑色暗笑的臉型", type: "B", chance: 10.55, gender: "male" },
+      { name: "黑色清晰的臉型", type: "B", chance: 10.55, gender: "male" },
+      { name: "黑色生氣的臉型", type: "B", chance: 10.55, gender: "male" },
+      { name: "黑色爽朗的臉型", type: "B", chance: 10.55, gender: "male" },
+      { name: "黑色純美臉形", type: "B", chance: 10.55, gender: "male" },
+      { name: "黑色陽光男臉型", type: "B", chance: 10.55, gender: "male" }
+    ];
+
+    // 設置性別
+    function selectGender(g) {
+      gender = g;
+      document.getElementById("maleBtn").classList.toggle("bg-blue-600", g === 'male');
+      document.getElementById("femaleBtn").classList.toggle("bg-pink-600", g === 'female');
+    }
+
+    // 設置功能類型（皇家美髮或皇家整形）
+    function selectFunction(type) {
+      functionType = type;
+      if (type === 'hair') {
+        document.getElementById("hairSection").classList.remove("hidden");
+        document.getElementById("surgerySection").classList.add("hidden");
+      } else if (type === 'surgery') {
+        document.getElementById("surgerySection").classList.remove("hidden");
+        document.getElementById("hairSection").classList.add("hidden");
+      }
+      const outputMessage = type === 'hair' ? '選擇了 皇家美髮' : '選擇了 皇家整形';
+      document.getElementById("history").innerText = `已選擇：${outputMessage}`;
+    }
+
+    // 更新統計數據
+    function updateCounters() {
+      if (functionType === 'hair') {
+        document.getElementById("totalDraws").innerText = totalDraws;
+        document.getElementById("totalSSSItems").innerText = totalSSSItems;
+        document.getElementById("totalSSItems").innerText = totalSSItems;
+        document.getElementById("totalSItems").innerText = totalSItems;
+        document.getElementById("totalAItems").innerText = totalAItems;
+        document.getElementById("totalBItems").innerText = totalBItems;
+        document.getElementById("totalCItems").innerText = totalCItems;
+      } else if (functionType === 'surgery') {
+        document.getElementById("totalDrawsSurgery").innerText = totalDrawsSurgery;
+        document.getElementById("totalSSSItemsSurgery").innerText = totalSSSItemsSurgery;
+        document.getElementById("totalSSItemsSurgery").innerText = totalSSItemsSurgery;
+        document.getElementById("totalSItemsSurgery").innerText = totalSItemsSurgery;
+        document.getElementById("totalAItemsSurgery").innerText = totalAItemsSurgery;
+      }
+    }
+
+    // 更新歷史紀錄
+    function updateHistory(result) {
+      if (history.length >= 200) {
+        history.pop();
+      }
+      history.unshift(result);
+
+      const historyContainer = document.getElementById("history");
+      historyContainer.innerHTML = "<div class='font-bold text-white'>抽取紀錄</div>";
+      history.forEach(item => {
+        const recordElement = document.createElement("div");
+        recordElement.innerText = item.name;
+
+        // 只有SSS、SS、S、A級道具才會顯示顏色
+        if (item.type === "SSS") {
+          recordElement.classList.add("bg-red-600", "text-white");
+        } else if (item.type === "SS") {
+          recordElement.classList.add("bg-orange-600", "text-white");
+        } else if (item.type === "S") {
+          recordElement.classList.add("bg-yellow-500", "text-black");
+        } else if (item.type === "A") {
+          recordElement.classList.add("bg-green-500", "text-black");
+        } else {
+          // B 和 C等級的道具没有顏色
+          recordElement.classList.add("text-white");
+        }
+
+        recordElement.classList.add("p-2", "rounded-lg", "mb-2");
+        historyContainer.appendChild(recordElement);
+      });
+    }
+
+    // 單抽邏輯
+    function drawSingle() {
+      if (!gender || !functionType) {
+        document.getElementById("history").innerText = "請先選擇性別和彗星功能！";
+        return;
+      }
+
+      if (functionType === 'hair') {
+        totalDraws++;
+      } else if (functionType === 'surgery') {
+        totalDrawsSurgery++;
+      }
+
+      let availableItems;
+      if (functionType === 'hair') {
+        availableItems = hairItems.filter(item => item.gender === null || item.gender === gender);
+      } else if (functionType === 'surgery') {
+        availableItems = surgeryItems.filter(item => item.gender === null || item.gender === gender);
+      }
+
+      const totalChance = availableItems.reduce((total, item) => total + item.chance, 0);
+
+      let randomNum = Math.random() * totalChance;
+      let selectedItem = null;
+
+      for (let item of availableItems) {
+        randomNum -= item.chance;
+        if (randomNum <= 0) {
+          selectedItem = item;
+          break;
+        }
+      }
+
+      // 根據選擇的道具類型進行統計
+      if (functionType === 'hair') {
+        if (selectedItem.type === "SSS") {
+          totalSSSItems++;
+        } else if (selectedItem.type === "SS") {
+          totalSSItems++;
+        } else if (selectedItem.type === "S") {
+          totalSItems++;
+        } else if (selectedItem.type === "A") {
+          totalAItems++;
+        } else if (selectedItem.type === "B") {
+          totalBItems++;
+        } else if (selectedItem.type === "C") {
+          totalCItems++;
+        }
+      } else if (functionType === 'surgery') {
+        if (selectedItem.type === "SSS") {
+          totalSSSItemsSurgery++;
+        } else if (selectedItem.type === "SS") {
+          totalSSItemsSurgery++;
+        } else if (selectedItem.type === "S") {
+          totalSItemsSurgery++;
+        } else if (selectedItem.type === "A") {
+          totalAItemsSurgery++;
+        }
+      }
+// ✅ 插入在第 252 行之後（在 updateHistory(...) 之前）
+
+if (functionType === 'hair') {
+  document.getElementById("hairSSSChance").innerText = totalDraws > 0 ? ((totalSSSItems / totalDraws) * 100).toFixed(2) + "%" : "0%";
+  document.getElementById("hairSSChance").innerText = totalDraws > 0 ? ((totalSSItems / totalDraws) * 100).toFixed(2) + "%" : "0%";
+  document.getElementById("hairSChance").innerText = totalDraws > 0 ? ((totalSItems / totalDraws) * 100).toFixed(2) + "%" : "0%";
+  document.getElementById("hairAChance").innerText = totalDraws > 0 ? ((totalAItems / totalDraws) * 100).toFixed(2) + "%" : "0%";
+  document.getElementById("hairBChance").innerText = totalDraws > 0 ? ((totalBItems / totalDraws) * 100).toFixed(2) + "%" : "0%";
+  document.getElementById("hairCChance").innerText = totalDraws > 0 ? ((totalCItems / totalDraws) * 100).toFixed(2) + "%" : "0%";
+} else if (functionType === 'surgery') {
+  document.getElementById("surgerySSSChance").innerText = totalDrawsSurgery > 0 ? ((totalSSSItemsSurgery / totalDrawsSurgery) * 100).toFixed(2) + "%" : "0%";
+  document.getElementById("surgerySSChance").innerText = totalDrawsSurgery > 0 ? ((totalSSItemsSurgery / totalDrawsSurgery) * 100).toFixed(2) + "%" : "0%";
+  document.getElementById("surgerySChance").innerText = totalDrawsSurgery > 0 ? ((totalSItemsSurgery / totalDrawsSurgery) * 100).toFixed(2) + "%" : "0%";
+  document.getElementById("surgeryAChance").innerText = totalDrawsSurgery > 0 ? ((totalAItemsSurgery / totalDrawsSurgery) * 100).toFixed(2) + "%" : "0%";
+}
+      updateHistory(selectedItem);
+      updateCounters();
+    }
+
+    // 清空歷史紀錄
+    function clearHistory() {
+      history = [];
+      totalDraws = 0;
+      totalSSSItems = 0;
+      totalSSItems = 0;
+      totalSItems = 0;
+      totalAItems = 0;
+      totalBItems = 0;
+      totalCItems = 0;
+      totalDrawsSurgery = 0;
+      totalSSSItemsSurgery = 0;
+      totalSSItemsSurgery = 0;
+      totalSItemsSurgery = 0;
+      totalAItemsSurgery = 0;
+      updateCounters();
+      document.getElementById("history").innerHTML = "<div class='font-bold text-white'>抽取紀錄</div>";
+    }
+  </script>
+</body>
+</html>
+
