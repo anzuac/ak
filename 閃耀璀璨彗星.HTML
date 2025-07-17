@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>抽卡系統 - 閃亮璀璨彗星</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-b from-gray-900 to-gray-800 text-white min-h-screen flex items-center justify-center">
+
+  <div class="bg-gray-700 p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-6 text-center">
+    <h1 class="text-3xl font-bold text-yellow-300">🌠 閃亮璀璨彗星</h1>
+
+    <div class="flex justify-center space-x-4">
+      <button onclick="selectGender('male')" id="maleBtn" class="px-4 py-2 rounded-full border border-white hover:bg-blue-600 transition">♂ 男性</button>
+      <button onclick="selectGender('female')" id="femaleBtn" class="px-4 py-2 rounded-full border border-white hover:bg-pink-600 transition">♀ 女性</button>
+    </div>
+
+    <div class="flex justify-center space-x-4">
+      <button onclick="selectFunction('sparkling')" class="px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-700 transition">✨ 閃亮彗星</button>
+      <button onclick="selectFunction('brilliant')" class="px-4 py-2 rounded-full bg-yellow-500 hover:bg-yellow-600 transition">💎 璀璨彗星</button>
+    </div>
+
+    <div class="flex justify-center space-x-4">
+      <button onclick="drawSingle()" class="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 transition">🎲 單抽</button>
+      <button onclick="drawTen()" class="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 transition">🎰 十連抽</button>
+      <button onclick="clearHistory()" class="px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 transition">🧹 清除紀錄</button>
+    </div>
+
+    <div id="sparklingSection" class="pt-4 text-sm text-gray-300 hidden">
+      <div>累積抽卡數量（閃亮）：<span id="totalDraws">0</span></div>
+      <div>抽到A級道具數量（閃亮）：<span id="totalAItems">0</span> (<span id="sparklingAChance">0%</span>)</div>
+      <div>抽到B級道具數量（閃亮）：<span id="totalBItems">0</span> (<span id="sparklingBChance">0%</span>)</div>
+    </div>
+
+    <div id="brilliantSection" class="pt-4 text-sm text-gray-300 hidden">
+      <div>累積抽卡數量（璀璨）：<span id="totalDrawsBrilliant">0</span></div>
+	  <div>抽到S級道具數量（璀璨）：<span id="totalSItemsBrilliant">0</span> (<span id="brilliantSChance">0%</span>)</div>
+      <div>抽到A級道具數量（璀璨）：<span id="totalAItemsBrilliant">0</span> (<span id="brilliantAChance">0%</span>)</div>
+    </div>
+
+    <div id="history" class="pt-4 text-sm text-gray-300 max-h-96 overflow-y-auto space-y-2">
+      <div class="font-bold text-white">抽取紀錄</div>
+    </div>
+  </div>
+
+  <script>
+    let gender = null;
+    let functionType = null;
+    let totalDraws = 0;
+    let totalAItems = 0;
+    let totalBItems = 0;  // 新增B級道具計數
+    let totalDrawsBrilliant = 0;
+    let totalAItemsBrilliant = 0;
+    let totalSItemsBrilliant = 0;
+    let history = [];
+
+   // 閃亮彗星道具數據與機率
+const sparklingItems = [
+  { name: "純潔熾天使", type: "A", chance: 0.80, gender: null },
+  { name: "聖潔熾天使", type: "A", chance: 0.80, gender: null },
+  { name: "榮耀熾天使(男)", type: "A", chance: 0.90, gender: "male" },
+  { name: "神聖熾天使(女)", type: "A", chance: 0.90, gender: "female" },
+  { name: "守護者熾天使羽毛", type: "A", chance: 1.20, gender: null },
+  { name: "崇高熾天使", type: "A", chance: 1.10, gender: null },
+  { name: "高雅熾天使", type: "A", chance: 1.10, gender: null },
+  { name: "戰鬥熾天使", type: "A", chance: 0.70, gender: null },
+  { name: "可愛兔兔殺人鯨動畫名牌戒指", type: "A", chance: 0.20, gender: null },
+  { name: "可愛兔兔殺人鯨動畫聊天戒指", type: "A", chance: 0.20, gender: null },
+  { name: "仲夏夜記憶", type: "B", chance: 1.50, gender: null },
+  { name: "仲夏夜回憶", type: "B", chance: 1.50, gender: null },
+  { name: "仲夏夜精靈(男)", type: "B", chance: 1.30, gender: "male" },
+  { name: "仲夏夜妖精(女)", type: "B", chance: 1.30, gender: "female" },
+  { name: "仲夏夜訊息", type: "B", chance: 1.50, gender: null },
+  { name: "仲夏夜蝴蝶", type: "B", chance: 1.30, gender: null },
+  { name: "仲夏夜花籃", type: "B", chance: 1.20, gender: null },
+  { name: "光輝的鯊魚之槍", type: "B", chance: 1.20, gender: null },
+  { name: "臨危不亂鞋子", type: "B", chance: 1.20, gender: null },
+  { name: "緊急出動海上救險隊帽子", type: "C", chance: 1.23, gender: null },
+  { name: "黃金鐵冠", type: "C", chance: 1.23, gender: null },
+  { name: "聖誕紅髮飾", type: "C", chance: 1.23, gender: null },
+  { name: "可愛聖誕", type: "C", chance: 1.23, gender: null },
+  { name: "聖誕銅鈴", type: "C", chance: 1.23, gender: null },
+  { name: "懈寄生閃亮髮飾", type: "C", chance: 1.23, gender: null },
+  { name: "聖誕樹帽子", type: "C", chance: 1.23, gender: null },
+  { name: "褐色麵包帽", type: "C", chance: 1.23, gender: null },
+  { name: "綠色郊遊帽", type: "C", chance: 1.23, gender: null },
+  { name: "王者籃球名牌戒指", type: "C", chance: 1.23, gender: null },
+  { name: "勝者籃球名牌戒指", type: "C", chance: 1.23, gender: null },
+  { name: "王者籃球聊天戒指", type: "C", chance: 1.23, gender: null },
+  { name: "勝者籃球聊天戒指", type: "C", chance: 1.23, gender: null },
+  { name: "橙色眼鏡", type: "C", chance: 1.23, gender: null },
+  { name: "白色遮陽眼鏡", type: "C", chance: 1.23, gender: null },
+  { name: "莫思卡登眼鏡", type: "C", chance: 1.23, gender: null },
+  { name: "橙色圓形墨鏡", type: "C", chance: 1.23, gender: null },
+  { name: "緊急出動海上救險隊套服", type: "C", chance: 1.23, gender: null },
+  { name: "緊急出動海上救險隊制服", type: "C", chance: 1.23, gender: null },
+  { name: "小雞圍裙", type: "C", chance: 1.23, gender: null },
+  { name: "紅色嘻哈裝", type: "C", chance: 1.23, gender: null },
+  { name: "藍色嘻哈裝", type: "C", chance: 1.23, gender: null },
+  { name: "紅救生衣", type: "C", chance: 1.23, gender: null },
+  { name: "英國足球制服 No.7", type: "C", chance: 1.23, gender: null },
+  { name: "揪林連帽套裝", type: "C", chance: 1.23, gender: null },
+  { name: "王者籃球上衣", type: "C", chance: 1.23, gender: null },
+  { name: "雅痞綠領帶襯衫", type: "C", chance: 1.23, gender: null },
+  { name: "炫彩無底洞 T-shirt", type: "C", chance: 1.23, gender: null },
+  { name: "白色休閒套頭T恤", type: "C", chance: 1.23, gender: null },
+  { name: "攝影師高領毛衣", type: "C", chance: 1.23, gender: null },
+  { name: "粉紅小花套頭T恤", type: "C", chance: 1.23, gender: null },
+  { name: "棒棒堂男孩上衣", type: "C", chance: 1.23, gender: null },
+  { name: "粉紅橫紋T恤", type: "C", chance: 1.23, gender: null },
+  { name: "模範生粉色上衣", type: "C", chance: 1.23, gender: null },
+  { name: "天藍星長衫", type: "C", chance: 1.23, gender: null },
+  { name: "愛麗斯兔子的下衣", type: "C", chance: 1.23, gender: null },
+  { name: "海洋系白色牛仔褲", type: "C", chance: 1.23, gender: null },
+  { name: "藍色貼身牛仔褲", type: "C", chance: 1.23, gender: null },
+  { name: "紅色睡褲", type: "C", chance: 1.23, gender: null },
+  { name: "灰色棒球褲", type: "C", chance: 1.23, gender: null },
+  { name: "偽裝軍褲", type: "C", chance: 1.23, gender: null },
+  { name: "藍色睡褲", type: "C", chance: 1.23, gender: null },
+  { name: "歐陽菲菲褲", type: "C", chance: 1.23, gender: null },
+  { name: "藍色街舞褲", type: "C", chance: 1.23, gender: null },
+  { name: "油漆牛仔褲", type: "C", chance: 1.23, gender: null },
+  { name: "緊急出動海上救險隊鞋", type: "C", chance: 1.23, gender: null },
+  { name: "超能推進運動鞋", type: "C", chance: 1.23, gender: null },
+  { name: "墮落城市高工皮鞋", type: "C", chance: 1.23, gender: null },
+  { name: "魔法學園長襪鞋", type: "C", chance: 1.23, gender: null },
+  { name: "武陵道場運動鞋", type: "C", chance: 1.23, gender: null },
+  { name: "小蜜蜂屁股", type: "C", chance: 1.23, gender: null },
+  { name: "黃精靈翅膀", type: "C", chance: 1.23, gender: null },
+  { name: "報紙披風", type: "C", chance: 1.23, gender: null },
+  { name: "藍色學生書包", type: "C", chance: 1.23, gender: null },
+  { name: "菱形風箏", type: "C", chance: 1.23, gender: null },
+  { name: "火箭推進器", type: "C", chance: 1.23, gender: null },
+  { name: "囧rz披風", type: "C", chance: 1.23, gender: null },
+  { name: "緊急出動海上救險隊信號槍", type: "C", chance: 1.23, gender: null },
+  { name: "麋鹿手杖", type: "C", chance: 1.23, gender: null },
+  { name: "我的聖誕老公公", type: "C", chance: 1.23, gender: null },
+  { name: "麋鹿角", type: "C", chance: 1.23, gender: null },
+  { name: "巧克力蘋果", type: "C", chance: 1.23, gender: null },
+  { name: "時空之鑰", type: "C", chance: 1.23, gender: null },
+  { name: "巧克力糖", type: "C", chance: 1.23, gender: null },
+  { name: "龍舌之焰", type: "C", chance: 1.23, gender: null },
+  { name: "紅蘿蔔兔", type: "C", chance: 1.23, gender: null },
+  { name: "蝴蝶結棒棒糖", type: "C", chance: 1.23, gender: null }
+];
+
+
+    const brilliantItems = [
+      { name: "宴會的黃金王冠", type: "S", chance: 1.19, gender: null },
+  { name: "宴會的黃金髮夾", type: "S", chance: 1.19, gender: null },
+  { name: "宴會主角套服", type: "S", chance: 1.13, gender: null },
+  { name: "宴會之花禮服", type: "S", chance: 1.13, gender: null },
+  { name: "宴會主角鞋子", type: "S", chance: 1.38, gender: null },
+  { name: "宴會之花鞋子", type: "S", chance: 1.38, gender: null },
+  { name: "宴會聚光燈", type: "S", chance: 1.26, gender: null },
+  { name: "宴會的皇家手杖", type: "S", chance: 0.85, gender: null },
+  { name: "宴會的華麗扇子", type: "S", chance: 0.85, gender: null },
+  { name: "寂靜的緊張感", type: "A", chance: 1.13, gender: null },
+  { name: "獨奏的華麗", type: "A", chance: 1.13, gender: null },
+  { name: "苦惱的指揮家", type: "A", chance: 1.11, gender: null },
+  { name: "優雅的指揮家", type: "A", chance: 1.11, gender: null },
+  { name: "孤獨的旋律", type: "A", chance: 1.17, gender: null },
+  { name: "單獨舞台的旋律", type: "A", chance: 1.17, gender: null },
+  { name: "藝術家的理想", type: "A", chance: 1.11, gender: null },
+  { name: "寂靜中的音樂會", type: "A", chance: 1.03, gender: null },
+  { name: "優美的演奏", type: "A", chance: 1.03, gender: null },
+  { name: "草莓牛奶的角", type: "B", chance: 1.67, gender: null },
+  { name: "草莓牛奶套服(男)", type: "B", chance: 1.63, gender: "male" },
+  { name: "草莓牛奶套服(女)", type: "B", chance: 1.63, gender: "female" },
+  { name: "草莓牛奶鞋", type: "B", chance: 1.60, gender: null },
+  { name: "草莓牛奶", type: "B", chance: 1.63, gender: null },
+  { name: "草莓牛奶棒", type: "B", chance: 1.57, gender: null },
+  { name: "草莓牛奶瓶聊天戒指", type: "B", chance: 1.63, gender: null },
+  { name: "草莓牛奶瓶名牌戒指", type: "B", chance: 1.63, gender: null },
+  { name: "飛翔竹蜻蜓", type: "A", chance: 1.13, gender: null },
+  { name: "夢想旅人(男)", type: "A", chance: 1.11, gender: "male" },
+  { name: "奇妙旅人(女)", type: "A", chance: 1.11, gender: "female" },
+  { name: "健行拍檔", type: "A", chance: 1.17, gender: null },
+  { name: "健行夥伴", type: "A", chance: 1.17, gender: null },
+  { name: "運動風探險家", type: "A", chance: 1.12, gender: null },
+  { name: "可愛探險家", type: "A", chance: 1.12, gender: null },
+  { name: "冒險迷你地圖", type: "A", chance: 1.04, gender: null },
+  { name: "寂靜傳說", type: "B", chance: 1.61, gender: null },
+  { name: "寂寞傳說", type: "B", chance: 1.61, gender: null },
+  { name: "光之升起傳說(男)", type: "B", chance: 1.57, gender: "male" },
+  { name: "光之升起神話(女)", type: "B", chance: 1.57, gender: "female" },
+  { name: "寂寞的遺跡", type: "B", chance: 1.53, gender: null },
+  { name: "倒下的荒野", type: "B", chance: 1.62, gender: null },
+  { name: "風之痕跡", type: "B", chance: 1.68, gender: null },
+  { name: "寒風痕跡", type: "B", chance: 1.68, gender: null },
+  { name: "寂靜瞬間", type: "B", chance: 1.53, gender: null },
+  { name: "球場上熱情籃球帽", type: "A", chance: 1.12, gender: null },
+  { name: "球場上拚勁籃球帽", type: "A", chance: 1.12, gender: null },
+  { name: "球場上熱情籃球服", type: "A", chance: 1.09, gender: null },
+  { name: "球場上拚勁籃球服", type: "A", chance: 1.09, gender: null },
+  { name: "球場上熱情籃球鞋", type: "A", chance: 1.16, gender: null },
+  { name: "球場上拚勁籃球鞋", type: "A", chance: 1.09, gender: null },
+  { name: "球場上觀眾席", type: "A", chance: 1.09, gender: null },
+  { name: "球場上的籃球", type: "A", chance: 1.02, gender: null },
+  { name: "藍色愛乾淨小兔", type: "B", chance: 1.63, gender: null },
+  { name: "紫色愛乾淨小兔", type: "B", chance: 1.63, gender: null },
+  { name: "晚安藍色睡衣", type: "B", chance: 1.61, gender: null },
+  { name: "晚安紫色睡衣", type: "B", chance: 1.61, gender: null },
+  { name: "泡泡小兔", type: "B", chance: 1.62, gender: null },
+  { name: "刷刷牙時間", type: "B", chance: 1.65, gender: null },
+  { name: "晚安藍色室內拖", type: "B", chance: 1.65, gender: null },
+  { name: "晚安紫色室內拖", type: "B", chance: 1.55, gender: null },
+  { name: "我臉頰上的黃瓜面膜", type: "B", chance: 1.63, gender: null },
+  { name: "我臉頰上的洗面乳", type: "B", chance: 1.63, gender: null },
+  { name: "晴天花朵", type: "A", chance: 1.13, gender: null },
+  { name: "綻放花朵", type: "A", chance: 1.13, gender: null },
+  { name: "綻放花藝師(男)", type: "A", chance: 1.12, gender: "male" },
+  { name: "花卉設計師(女)", type: "A", chance: 1.12, gender: "female" },
+  { name: "輕飄飄花冠", type: "A", chance: 1.17, gender: null },
+  { name: "輕飄飄花萼", type: "A", chance: 1.17, gender: null },
+  { name: "春日之心", type: "A", chance: 1.12, gender: null },
+  { name: "盛開的幸福", type: "A", chance: 1.04, gender: null },
+  { name: "超級無敵霹靂長的腕龍", type: "B", chance: 1.62, gender: null },
+  { name: "超級無敵霹靂長的長頸鹿", type: "B", chance: 1.62, gender: null },
+  { name: "腕龍套裝", type: "B", chance: 1.60, gender: null },
+  { name: "長頸鹿套裝", type: "B", chance: 1.60, gender: null },
+  { name: "快樂海豚", type: "B", chance: 1.61, gender: null },
+  { name: "很高很高的樹", type: "B", chance: 1.61, gender: null },
+  { name: "疊高高梯子", type: "B", chance: 1.66, gender: null },
+  { name: "魅力的微笑", type: "B", chance: 1.73, gender: null }
+    ];
+
+    // 設置性別
+    function selectGender(g) {
+      gender = g;
+      document.getElementById("maleBtn").classList.toggle("bg-blue-600", g === 'male');
+      document.getElementById("femaleBtn").classList.toggle("bg-pink-600", g === 'female');
+    }
+
+    // 設置彗星類型
+    function selectFunction(type) {
+      functionType = type;
+      if (type === 'sparkling') {
+        document.getElementById("sparklingSection").classList.remove("hidden");
+        document.getElementById("brilliantSection").classList.add("hidden");
+      } else if (type === 'brilliant') {
+        document.getElementById("brilliantSection").classList.remove("hidden");
+        document.getElementById("sparklingSection").classList.add("hidden");
+      }
+      const outputMessage = type === 'sparkling' ? '選擇了 閃亮彗星' : '選擇了 璀璨彗星';
+      document.getElementById("history").innerText = `已選擇：${outputMessage}`;
+    }
+
+    // 更新統計
+    function updateCounters() {
+      if (functionType === 'sparkling') {
+        document.getElementById("totalDraws").innerText = totalDraws;
+        document.getElementById("totalAItems").innerText = totalAItems;
+        document.getElementById("totalBItems").innerText = totalBItems;
+
+        // 計算A級和B級的百分比機率
+        const sparklingAChance = (totalAItems / totalDraws) * 100;
+        const sparklingBChance = (totalBItems / totalDraws) * 100;
+
+        document.getElementById("sparklingAChance").innerText = sparklingAChance.toFixed(2) + "%";
+        document.getElementById("sparklingBChance").innerText = sparklingBChance.toFixed(2) + "%";
+      } else if (functionType === 'brilliant') {
+        document.getElementById("totalDrawsBrilliant").innerText = totalDrawsBrilliant;
+        document.getElementById("totalAItemsBrilliant").innerText = totalAItemsBrilliant;
+        document.getElementById("totalSItemsBrilliant").innerText = totalSItemsBrilliant;
+
+        // 計算A級和S級的百分比機率
+        const brilliantAChance = (totalAItemsBrilliant / totalDrawsBrilliant) * 100;
+        const brilliantSChance = (totalSItemsBrilliant / totalDrawsBrilliant) * 100;
+
+        document.getElementById("brilliantAChance").innerText = brilliantAChance.toFixed(2) + "%";
+        document.getElementById("brilliantSChance").innerText = brilliantSChance.toFixed(2) + "%";
+      }
+    }
+
+    // 更新歷史紀錄
+    function updateHistory(result) {
+      if (history.length >= 200) {
+        history.pop();
+      }
+      history.unshift(result);
+
+      const historyContainer = document.getElementById("history");
+      historyContainer.innerHTML = "<div class='font-bold text-white'>抽取紀錄</div>";  // 保證顯示標題
+      history.forEach(item => {
+        const recordElement = document.createElement("div");
+        recordElement.innerText = item.name;
+
+        if (item.type === "A") {
+          recordElement.classList.add("bg-yellow-500", "text-black");
+        } else if (item.type === "S") {
+          recordElement.classList.add("bg-red-600", "text-white");
+        } else if (item.type === "B") {
+          recordElement.classList.add("bg-green-500", "text-black");
+        } else {
+          recordElement.classList.add("bg-gray-700", "text-white");
+        }
+
+        recordElement.classList.add("p-2", "rounded-lg", "mb-2");
+        historyContainer.appendChild(recordElement);
+      });
+    }
+
+    // 單抽邏輯
+    function drawSingle() {
+      if (!gender || !functionType) {
+        document.getElementById("history").innerText = "請先選擇性別和彗星功能！";
+        return;
+      }
+
+      if (functionType === 'sparkling') {
+        totalDraws++;
+      } else if (functionType === 'brilliant') {
+        totalDrawsBrilliant++;
+      }
+
+      let availableItems;
+      if (functionType === 'sparkling') {
+        availableItems = sparklingItems.filter(item => item.gender === null || item.gender === gender);
+      } else if (functionType === 'brilliant') {
+        availableItems = brilliantItems.filter(item => item.gender === null || item.gender === gender);
+      }
+
+      const totalChance = availableItems.reduce((total, item) => total + item.chance, 0);
+
+      let randomNum = Math.random() * totalChance;
+      let selectedItem = null;
+
+      for (let item of availableItems) {
+        randomNum -= item.chance;
+        if (randomNum <= 0) {
+          selectedItem = item;
+          break;
+        }
+      }
+
+      if (selectedItem.type === "A") {
+        if (functionType === 'sparkling') {
+          totalAItems++;
+        } else if (functionType === 'brilliant') {
+          totalAItemsBrilliant++;
+        }
+      }
+      if (selectedItem.type === "B") {
+        totalBItems++;  // 記錄B級道具
+      }
+      if (selectedItem.type === "S") {
+        totalSItemsBrilliant++;
+      }
+
+      updateHistory(selectedItem);
+      updateCounters();
+    }
+
+    // 十連抽邏輯
+    function drawTen() {
+      if (!gender || !functionType) {
+        document.getElementById("history").innerText = "請先選擇性別和彗星功能！";
+        return;
+      }
+
+      if (functionType === 'sparkling') {
+        totalDraws += 10;
+      } else if (functionType === 'brilliant') {
+        totalDrawsBrilliant += 10;
+      }
+
+      let results = [];
+      let availableItems;
+      if (functionType === 'sparkling') {
+        availableItems = sparklingItems.filter(item => item.gender === null || item.gender === gender);
+      } else if (functionType === 'brilliant') {
+        availableItems = brilliantItems.filter(item => item.gender === null || item.gender === gender);
+      }
+
+      const totalChance = availableItems.reduce((total, item) => total + item.chance, 0);
+
+      for (let i = 0; i < 10; i++) {
+        let randomNum = Math.random() * totalChance;
+        let selectedItem = null;
+
+        for (let item of availableItems) {
+          randomNum -= item.chance;
+          if (randomNum <= 0) {
+            selectedItem = item;
+            break;
+          }
+        }
+
+        results.push(selectedItem);
+
+        if (selectedItem.type === "A") {
+          if (functionType === 'sparkling') {
+            totalAItems++;
+          } else if (functionType === 'brilliant') {
+            totalAItemsBrilliant++;
+          }
+        }
+        if (selectedItem.type === "B") {
+          totalBItems++;  // 記錄B級道具
+        }
+        if (selectedItem.type === "S") {
+          totalSItemsBrilliant++;
+        }
+      }
+
+      results.forEach(result => updateHistory(result));
+      updateCounters();
+    }
+
+    // 清空歷史紀錄
+    function clearHistory() {
+      history = [];
+      totalDraws = 0;
+      totalAItems = 0;
+      totalBItems = 0;  // 清空B級道具
+      totalDrawsBrilliant = 0;
+      totalAItemsBrilliant = 0;
+      totalSItemsBrilliant = 0;
+      updateCounters();
+      document.getElementById("history").innerHTML = "<div class='font-bold text-white'>抽取紀錄</div>"; // 清空後仍顯示標題
+    }
+  </script>
+</body>
+</html>
