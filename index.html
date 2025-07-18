@@ -1,29 +1,111 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome to My Simple Website</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>遊戲啟動頁</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Orbitron', sans-serif;
+            background: url('https://i.ibb.co/Myw8MHv5/TKunimi-Swim2024-R2.png') no-repeat center center fixed;
+            background-size: cover;
+            color: #fff;
+        }
+
+        .overlay {
+            background-color: rgba(0, 0, 0, 0.6);
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            padding: 40px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 3rem;
+            text-shadow: 0 0 15px #00e0ff;
+        }
+
+        .link-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .card {
+            background: transparent; /* 全透明 */
+            border: 2px solid #00e0ff;
+            border-radius: 15px;
+            padding: 20px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px #00e0ff;
+        }
+
+        .card a {
+            display: block;
+            margin-top: 15px;
+            padding: 10px;
+            background: #00e0ff;
+            color: black;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 8px;
+        }
+
+        .date {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: #ccc;
+        }
+
+        footer {
+            margin-top: 50px;
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+    </style>
 </head>
 <body>
+    <div class="overlay"></div>
     <div class="container">
-        <header>
-            <h1>Welcome to My Simple Website</h1>
-        </header>
-
-        <main>
-            <p>Click below to navigate to different pages:</p>
-            <ul class="link-list">
-                <li><a href="星力強化.html" class="link-btn">前往星力強化</a></li>
-                <li><a href="閃耀璀璨彗星.HTML" class="link-btn">前往閃耀璀璨彗星</a></li>
-                <li><a href="皇家美容院.html" class="link-btn">前往皇家美容院</a></li>
-                <li><a href="萌獸卡牌包.html" class="link-btn">前往萌獸卡牌</a></li>
-            </ul>
-        </main>
-
+        <h1>歡迎來到遊戲啟動頁</h1>
+        <div class="link-grid">
+            <div class="card">
+                <div>星力強化</div>
+                <div class="date">2025-07-19 更新</div>
+                <a href="星力強化.html">開始</a>
+            </div>
+            <div class="card">
+                <div>閃耀璀璨彙星</div>
+                <div class="date">2025-07-19 更新</div>
+                <a href="閃耀璀璨彙星.HTML">開始</a>
+            </div>
+            <div class="card">
+                <div>皇家美容院</div>
+                <div class="date">2025-07-19 更新</div>
+                <a href="皇家美容院.html">開始</a>
+            </div>
+            <div class="card">
+                <div>萌獸卡牌包</div>
+                <div class="date">2025-07-19 更新</div>
+                <a href="萌獸卡牌包.html">開始</a>
+            </div>
+        </div>
         <footer>
-            <p>&copy; 2025 My Simple Website</p>
+            &copy; 2025 遊戲系統首頁設計
         </footer>
     </div>
 </body>
