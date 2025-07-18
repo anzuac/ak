@@ -1,0 +1,331 @@
+
+<!DOCTYPE html>
+
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<title>萌獸卡牌包</title>
+<style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f0f8;
+      padding: 20px;
+      text-align: center;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .draw-button {
+      font-size: 1.2em;
+      padding: 12px 30px;
+      background: linear-gradient(to right, #80d0c7, #13547a);
+      border-radius: 12px;
+      border: none;
+      color: white;
+      cursor: pointer;
+      margin: 10px;
+      transition: all 0.3s ease;
+      box-shadow: 0 5px 10px rgba(0,0,0,0.15);
+      min-width: 180px;
+    }
+    .draw-button:hover {
+      background: linear-gradient(to right, #13547a, #80d0c7);
+      transform: translateY(-2px);
+    }
+    .result-box {
+      margin-top: 20px;
+      padding: 15px;
+      background: #ffffff;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      white-space: pre-wrap;
+    }
+    .stats-box {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f9f9ff;
+      border: 1px dashed #aaa;
+      border-radius: 8px;
+      font-size: 0.95em;
+      text-align: left;
+      display: flex;
+      justify-content: space-between;
+      gap: 40px;
+    }
+    .stats-box ul {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 0.5em;
+    }
+    .stats-box li {
+      margin: 4px 0;
+    }
+    .history-box {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 10px;
+      text-align: left;
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .ss-bg { background-color: gold; color: black; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
+    .s-bg { background-color: #ff6600; color: white; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
+    .epic-tag { background-color: #ffd700; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold; }
+    .legend-tag { background-color: #00cc66; color: black; padding: 2px 6px; border-radius: 5px; font-weight: bold; }
+  
+    /* 星空背景動畫 */
+    body {
+      background: #000;
+      overflow: hidden;
+    }
+
+    canvas#bgCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: -1;
+    }
+	
+    
+    h1 {
+      color: white;
+    }
+    </style>
+<script src="beast_data.js"></script>
+<script src="rare_judge.js"></script>
+<script src="draw_logic.js"></script>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<script>
+  const canvas = document.getElementById("bgCanvas");
+  const ctx = canvas.getContext("2d");
+  let w, h;
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  const stars = Array(120).fill().map(() => ({
+    x: Math.random() * w,
+    y: Math.random() * h,
+    r: Math.random() * 1.5 + 0.3,
+    d: Math.random() * 0.5 + 0.05
+  }));
+
+  function drawStars() {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "white";
+    stars.forEach(star => {
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function animate() {
+    stars.forEach(star => {
+      star.y += star.d;
+      if (star.y > h) {
+        star.y = 0;
+        star.x = Math.random() * w;
+      }
+    });
+    drawStars();
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+</script>
+<div class="container">
+<h1>萌獸卡牌包</h1>
+<div class="draw-reset-wrap">
+<button class="draw-button" onclick="drawBeast()">點此抽卡</button>
+<button class="draw-button" onclick="resetData()">清除資料</button>
+<button class="draw-button" onclick="autoDrawUntilSS()">直到抽到 SS</button>
+<button class="draw-button" onclick="confirmDrawUntilSSLegend()">直到抽到 SS 且 傳說</button></div>
+<div class="result-box" id="result">請點選上方按鈕抽選</div>
+<div class="stats-box" id="stats">
+<div>
+<div>抽卡數：<span id="totalCount">0</span></div>
+<ul>
+<li>SS：<span id="ssCount">0</span>（<span id="ssPct">0.00%</span>）</li>
+<li>S：<span id="sCount">0</span>（<span id="sPct">0.00%</span>）</li>
+<li>A：<span id="aCount">0</span>（<span id="aPct">0.00%</span>）</li>
+<li>B：<span id="bCount">0</span>（<span id="bPct">0.00%</span>）</li>
+</ul>
+</div>
+<div>
+<ul>
+<li>特殊：<span id="specialCount">0</span>（<span id="specialPct">0.00%</span>）</li>
+<li>稀有：<span id="rareCount">0</span>（<span id="rarePct">0.00%</span>）</li>
+<li>罕見：<span id="epicCount">0</span>（<span id="epicPct">0.00%</span>）</li>
+<li>傳說：<span id="legendCount">0</span>（<span id="legendPct">0.00%</span>）</li>
+</ul>
+</div>
+</div>
+<div class="history-box" id="history"></div>
+</div>
+<script>
+  let total = 0;
+  let count = { SS: 0, S: 0, A: 0, B: 0 };
+  let levelCount = { 特殊: 0, 稀有: 0, 罕見: 0, 傳說: 0 };
+
+  function drawBeast() {
+    const results = [drawByPosition(1), drawByPosition(2), drawByPosition(3)];
+    let html = "你抽中了：\n";
+
+    results.forEach((r, i) => {
+      if (!r) return;
+      const rarity = r.item.rarity;
+      const level = r.level;
+
+      let rarityClass = "";
+      if (rarity === "SS") rarityClass = "ss-bg";
+      else if (rarity === "S") rarityClass = "s-bg";
+
+      let levelSpan = level;
+      if (level === "罕見") levelSpan = '<span class="epic-tag">罕見</span>';
+      else if (level === "傳說") levelSpan = '<span class="legend-tag">傳說</span>';
+
+      total++;
+      count[rarity]++;
+      levelCount[level]++;
+
+      const nameHtml = rarityClass ? `<span class="${rarityClass}">${r.item.name}</span>` : r.item.name;
+      const line = `❶❷❸`[i] + ` ${nameHtml}（${levelSpan}）`;
+      html += line + "\n";
+
+      const div = document.createElement('div');
+      div.innerHTML = `${total}. ${line}`;
+      document.getElementById('history').prepend(div);
+    });
+
+    document.getElementById('result').innerHTML = html;
+    updateStats();
+  }
+
+  function updateStats() {
+    document.getElementById('totalCount').textContent = total;
+    ['SS','S','A','B'].forEach(r => {
+      const num = count[r];
+      const pct = total ? ((num / total) * 100).toFixed(2) : '0.00';
+      document.getElementById(r.toLowerCase() + 'Count').textContent = num;
+      document.getElementById(r.toLowerCase() + 'Pct').textContent = pct + '%';
+    });
+    ['特殊','稀有','罕見','傳說'].forEach(l => {
+      const num = levelCount[l];
+      const pct = total ? ((num / total) * 100).toFixed(2) : '0.00';
+      const id = {
+        '特殊': 'special',
+        '稀有': 'rare',
+        '罕見': 'epic',
+        '傳說': 'legend'
+      }[l];
+      document.getElementById(id + 'Count').textContent = num;
+      document.getElementById(id + 'Pct').textContent = pct + '%';
+    });
+  }
+
+  
+function autoDrawUntilSS() {
+  let foundSS = false;
+
+  while (!foundSS) {
+    const results = [drawByPosition(1), drawByPosition(2), drawByPosition(3)];
+    let html = "你抽中了：\n";
+
+    results.forEach((r, i) => {
+      if (!r) return;
+      const rarity = r.item.rarity;
+      const level = r.level;
+      const rarityClass = rarity.toLowerCase() + "-bg";
+
+      total++;
+      count[rarity]++;
+      levelCount[level]++;
+
+      const line = `❶❷❸`[i] + ` <span class="${rarityClass}">${r.item.name}</span>（${level}）`;
+      html += line + "\n";
+
+      const div = document.createElement('div');
+      div.innerHTML = `${total}. ${line}`;
+      //div.style.color = 'white';
+      document.getElementById('history').prepend(div);
+
+      if (rarity === 'SS') {
+        foundSS = true;
+      }
+    });
+
+    document.getElementById('result').innerHTML = html;
+    updateStats();
+  }
+}
+
+
+function resetData() {
+    total = 0;
+    count = { SS: 0, S: 0, A: 0, B: 0 };
+    levelCount = { 特殊: 0, 稀有: 0, 罕見: 0, 傳說: 0 };
+    updateStats();
+    document.getElementById('result').innerText = '請點選上方按鈕抽選';
+    document.getElementById('history').innerHTML = '';
+  }
+</script>
+<script>
+function autoDrawUntilSSLegend() {
+  let found = false;
+
+  while (!found) {
+    const results = [drawByPosition(1), drawByPosition(2), drawByPosition(3)];
+    let html = "你抽中了：\n";
+
+    results.forEach((r, i) => {
+      if (!r) return;
+      const rarity = r.item.rarity;
+      const level = r.level;
+
+      let rarityClass = "";
+      if (rarity === "SS") rarityClass = "ss-bg";
+      else if (rarity === "S") rarityClass = "s-bg";
+
+      let levelSpan = level;
+      if (level === "罕見") levelSpan = '<span class="epic-tag">罕見</span>';
+      else if (level === "傳說") levelSpan = '<span class="legend-tag">傳說</span>';
+
+      total++;
+      count[rarity]++;
+      levelCount[level]++;
+
+      const nameHtml = rarityClass ? `<span class="${rarityClass}">${r.item.name}</span>` : r.item.name;
+      const line = `❶❷❸`[i] + ` ${nameHtml}（${levelSpan}）`;
+      html += line + "\n";
+
+      const div = document.createElement('div');
+      div.innerHTML = `${total}. ${line}`;
+      document.getElementById('history').prepend(div);
+
+      if (rarity === 'SS' && level === '傳說') {
+        found = true;
+      }
+    });
+
+    document.getElementById('result').innerHTML = html;
+    updateStats();
+  }
+}
+</script><script>
+function confirmDrawUntilSSLegend() {
+  const proceed = confirm("此操作可能導致瀏覽器無回應，是否繼續抽取直到獲得 SS 且 傳說？");
+  if (proceed) {
+    autoDrawUntilSSLegend();
+  }
+}
+</script></body>
+</html>
