@@ -1,0 +1,369 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>萌獸方塊模擬器</title>
+  <style>
+    body {
+      font-family: "Microsoft JhengHei", sans-serif;
+      background: #ffeceb;
+      margin: 0;
+      padding: 2em;
+      display: flex;
+      justify-content: center;
+    }
+    .cube-box {
+      background: #fbb9a7;
+      padding: 2em;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 600px;
+    }
+    .title {
+      font-size: 1.8em;
+      font-weight: bold;
+      margin-bottom: 1.2em;
+    }
+    .btn-row {
+      display: flex;
+      justify-content: center;
+      gap: 1em;
+      margin-bottom: 1em;
+    }
+    .btn {
+      padding: 0.8em 2em;
+      font-size: 1.1rem;
+      background-color: #f15a29;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 4px 0 #b53c1c;
+      cursor: pointer;
+    }
+    .setting-btn {
+      font-size: 0.9rem;
+      padding: 0.5em 1em;
+      background-color: #888;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .dropdown-select {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5em;
+      margin-bottom: 1.5em;
+    }
+    select {
+      padding: 0.5em;
+      font-size: 1rem;
+      width: 70%;
+    }
+    .result-area {
+      background: #ffeceb;
+      min-height: 120px;
+      border-radius: 12px;
+      padding: 1em;
+      font-size: 1.1rem;
+      color: #333;
+      margin-bottom: 1em;
+    }
+    .control-row {
+      display: flex;
+      justify-content: center;
+      gap: 1em;
+      margin-bottom: 1.5em;
+    }
+    .stats-section {
+      background: #fff6f5;
+      padding: 1em;
+      border-radius: 12px;
+      margin-top: 1em;
+    }
+    .stats-list {
+      margin-top: 0.5em;
+      max-height: 300px;
+      overflow-y: auto;
+      text-align: left;
+    }
+    .stat-line {
+      margin-bottom: 0.3em;
+    }
+    .stat-group {
+      margin-bottom: 0.8em;
+    }
+    .stat-group-title {
+      font-weight: bold;
+      margin-top: 0.5em;
+      margin-bottom: 0.2em;
+    }
+  </style>
+  <script src="potential_table_lv5.js"></script>
+</head>
+<body>
+
+  <div class="cube-box">
+    <div class="title">萌獸方塊</div>
+
+    <div class="dropdown-select">
+      <select id="target1"><option>請選擇目標詞條 1</option></select>
+      <select id="target2"><option>請選擇目標詞條 2</option></select>
+      <select id="target3"><option>請選擇目標詞條 3</option></select>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="drawOnce()">洗一次</button>
+      <button class="setting-btn" onclick="drawUntilTarget()">洗到指定目標</button>
+    </div>
+
+    <div class="result-area" id="resultArea">
+      尚未開始洗方塊...
+    </div>
+
+    <div class="control-row">
+      <button class="btn" onclick="clearStats()">清除統計</button>
+      <button class="btn" onclick="forceStop()">強制停止</button>
+    </div>
+
+    <div class="stats-section">
+      顯示統計結果：
+      <div class="stats-list" id="statsList">
+        <div class="stat-line" id="totalDraws"><strong>總共洗方塊次數：</strong>0 次</div>
+        <div class="stat-group">
+          <div class="stat-group-title">🎯 特殊條件命中統計</div>
+          <div class="stat-line">單終：<span id="count_single_final">0</span> 次</div>
+          <div class="stat-line">雙終：<span id="count_double_final">0</span> 次</div>
+          <div class="stat-line">雙終物：<span id="count_double_final_physical">0</span> 次</div>
+          <div class="stat-line">雙終魔：<span id="count_double_final_magic">0</span> 次</div>
+          <div class="stat-line">三終：<span id="count_triple_final">0</span> 次</div>
+          <div class="stat-line">三物：<span id="count_triple_physical">0</span> 次</div>
+          <div class="stat-line">三魔：<span id="count_triple_magic">0</span> 次</div>
+          <div class="stat-line">三加持：<span id="count_triple_buff">0</span> 次</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  let totalDrawCount = 0;
+let lastDrawnOptions = [];
+
+let count_single_final = 0;
+let count_double_final = 0;
+let count_double_final_physical = 0;
+let count_double_final_magic = 0;
+let count_triple_final = 0;
+let count_triple_physical = 0;
+let count_triple_magic = 0;
+let count_triple_buff = 0;
+
+
+  function populateDropdowns() {
+    const dropdowns = [document.getElementById('target1'), document.getElementById('target2'), document.getElementById('target3')];
+    dropdowns.forEach(select => {
+      potentialList.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.name;
+        option.textContent = p.name;
+        select.appendChild(option);
+      });
+    });
+  }
+
+  function weightedRandomDraw() {
+    const total = potentialList.reduce((sum, p) => sum + p.chance, 0);
+    let r = Math.random() * total;
+    for (let p of potentialList) {
+      if (r < p.chance) return p;
+      r -= p.chance;
+    }
+    return potentialList[potentialList.length - 1];
+  }
+
+  
+function calculateDiscountedCost(drawCount) {
+  const fullBlocks = Math.floor(drawCount / 10);
+  const remaining = drawCount % 10;
+  return fullBlocks * 270 + remaining * 30;
+}
+
+function drawOnce() {
+    const result = [];
+    lastDrawnOptions = result;
+    for (let i = 0; i < 3; i++) {
+      const draw = weightedRandomDraw();
+      result.push(draw);
+    }
+
+    totalDrawCount++;
+
+  const names = result.map(r => r.name);
+  const finalCount = names.filter(name => name === "最終傷害").length;
+  const physicalCount = names.filter(name => name === "物理攻擊力%").length;
+  const magicCount = names.filter(name => name === "魔法攻擊力%").length;
+  const buffCount = names.filter(name => name.includes("加持技能持續時間")).length;
+
+  if (finalCount === 3) {
+    count_triple_final++;
+  } else if (finalCount === 2 && physicalCount === 1) {
+    count_double_final_physical++;
+  } else if (finalCount === 2 && magicCount === 1) {
+    count_double_final_magic++;
+  } else if (finalCount === 2) {
+    count_double_final++;
+  } else if (finalCount === 1) {
+    count_single_final++;
+  }
+
+  if (physicalCount === 3) count_triple_physical++;
+  if (magicCount === 3) count_triple_magic++;
+  if (buffCount === 3) count_triple_buff++;
+
+  document.getElementById("count_single_final").innerText = count_single_final;
+  document.getElementById("count_double_final").innerText = count_double_final;
+  document.getElementById("count_double_final_physical").innerText = count_double_final_physical;
+  document.getElementById("count_double_final_magic").innerText = count_double_final_magic;
+  document.getElementById("count_triple_final").innerText = count_triple_final;
+  document.getElementById("count_triple_physical").innerText = count_triple_physical;
+  document.getElementById("count_triple_magic").innerText = count_triple_magic;
+  document.getElementById("count_triple_buff").innerText = count_triple_buff;
+
+    document.getElementById('totalDraws').innerHTML = `<strong>總共洗方塊次數：</strong>${totalDrawCount} 次 （💰總金額：${calculateDiscountedCost(totalDrawCount)} 元）`;
+
+    const resultDiv = document.getElementById('resultArea');
+    resultDiv.innerHTML = 
+
+
+result.map(r => {
+  if (typeof r.value === "string" && r.value.includes("/") && r.name.includes("一定機率") && r.name.includes("效果")) {
+    const [chance, level] = r.value.split("/");
+    return r.name.replace("一定機率", `${chance.trim()}% 機率`).replace("效果", `${level.trim()}級效果`);
+  }
+  if (typeof r.value === "string" && r.value.includes("/") && r.name.includes("恢復") && r.name.includes("機率")) {
+    const [chance, amount] = r.value.split("/");
+    const type = r.name.includes("HP") ? "HP" : "MP";
+    return `攻擊時有${chance.trim()}%機率恢復${amount.trim()}${type}`;
+  }
+  if (r.name.includes("一定的屬性來追加萌獸攻擊力")) {
+    return r.name.replace("一定的", `${r.value}%`);
+  }
+  if (r.name.includes("一定的攻擊力來追加萌獸攻擊力")) {
+    return r.name.replace("一定的", `${r.value}%`);
+  }
+  if (r.name === "加持技能持續時間") {
+  return `${r.name} +${r.value}%`;
+}
+  if (r.name.includes("一定秒數內恢復HP")) {
+    return `一定秒數內恢復${r.value}HP`;
+  }
+  if (r.name.includes("一定秒數內恢復MP")) {
+    return `一定秒數內恢復${r.value}MP`;
+  }
+  if (r.name === "爆擊機率") {
+    return `${r.name}+${r.value}%`;
+  }
+  if (r.name === "最終傷害") {
+    return `${r.name}+${r.value}%`;
+  }
+  if (r.name.endsWith('%')) {
+    return `${r.name.slice(0, -1)} +${r.value}%`;
+  }
+  return `${r.name} +${r.value}`;
+}).join('<br>');
+
+
+
+  
+
+function updateStatWithPercentage(id, count) {
+      const percent = totalDrawCount > 0 ? ((count / totalDrawCount) * 100).toFixed(4) : "0.0000";
+      document.getElementById(id).innerText = `${count}（${percent}%）`;
+    }
+
+    updateStatWithPercentage("count_single_final", count_single_final);
+    updateStatWithPercentage("count_double_final", count_double_final);
+    updateStatWithPercentage("count_double_final_physical", count_double_final_physical);
+    updateStatWithPercentage("count_double_final_magic", count_double_final_magic);
+    updateStatWithPercentage("count_triple_final", count_triple_final);
+    updateStatWithPercentage("count_triple_physical", count_triple_physical);
+    updateStatWithPercentage("count_triple_magic", count_triple_magic);
+    updateStatWithPercentage("count_triple_buff", count_triple_buff);
+}
+function drawUntilTarget() {
+    const targets = [
+      document.getElementById("target1").value,
+      document.getElementById("target2").value,
+      document.getElementById("target3").value
+    ].filter(v => v && !v.includes("請選擇"));
+
+    if (targets.length === 0) {
+      alert("請至少選擇一個目標詞條！");
+      return;
+    }
+
+    isAutoDrawing = true;
+
+    function matchTarget(names, targets) {
+      const nameCount = {};
+      names.forEach(n => nameCount[n] = (nameCount[n] || 0) + 1);
+      for (let t of targets) {
+        if (!nameCount[t]) return false;
+        nameCount[t]--;
+      }
+      return true;
+    }
+
+    function loopDraw() {
+      if (!isAutoDrawing) return;
+      if (!isAutoDrawing) return;
+      drawOnce();
+      const drawnNames = lastDrawnOptions.map(r => r.name);
+      if (matchTarget(drawnNames, targets)) {
+        isAutoDrawing = false;
+        alert("🎯 達成目標條件！");
+        return;
+      }
+      setTimeout(loopDraw, -1000);
+    }
+
+    loopDraw();
+  }
+
+  function clearStats() {
+    totalDrawCount = 0;
+    document.getElementById('totalDraws').innerHTML = `<strong>總共洗方塊次數：</strong>0 次 （💰總金額：0 元）`;
+    
+    count_single_final = 0;
+    count_double_final = 0;
+    count_double_final_physical = 0;
+    count_double_final_magic = 0;
+    count_triple_final = 0;
+    count_triple_physical = 0;
+    count_triple_magic = 0;
+    count_triple_buff = 0;
+
+    document.getElementById("count_single_final").innerText = "0（0.0000%）";
+    document.getElementById("count_double_final").innerText = "0（0.0000%）";
+    document.getElementById("count_double_final_physical").innerText = "0（0.0000%）";
+    document.getElementById("count_double_final_magic").innerText = "0（0.0000%）";
+    document.getElementById("count_triple_final").innerText = "0（0.0000%）";
+    document.getElementById("count_triple_physical").innerText = "0（0.0000%）";
+    document.getElementById("count_triple_magic").innerText = "0（0.0000%）";
+    document.getElementById("count_triple_buff").innerText = "0（0.0000%）";
+document.getElementById('resultArea').innerHTML = '尚未開始洗方塊...';
+  }
+
+  function forceStop() {
+    isAutoDrawing = false;
+    alert('⛔ 已停止自動洗方塊！');
+  }
+
+  window.onload = populateDropdowns;
+</script>
+
+</body>
+</html>
