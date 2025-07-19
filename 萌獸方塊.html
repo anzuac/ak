@@ -286,7 +286,7 @@ result.map(r => {
   
 
 function updateStatWithPercentage(id, count) {
-      const percent = totalDrawCount > 0 ? ((count / totalDrawCount) * 100).toFixed(4) : "0.0000";
+      const percent = totalDrawCount > 0 ? ((count / totalDrawCount) * 100).toFixed(6) : "0.000000";
       document.getElementById(id).innerText = `${count}（${percent}%）`;
     }
 
