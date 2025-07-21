@@ -1,87 +1,21 @@
-
 <!DOCTYPE html>
-
 <html lang="zh-Hant">
 <head>
-<meta charset="utf-8"/>
-<title>萌獸卡牌包</title>
-<script src="device_control.js"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>萌獸卡牌包</title>
+  <script src="device_control.js"></script>
+  <script src="beast_data.js"></script>
+  <script src="rare_judge.js"></script>
+  <script src="draw_logic.js"></script>
 
-<style>
+  <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f0f0f8;
-      padding: 20px;
-      text-align: center;
-    }
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-    }
-    .draw-button {
-      font-size: 1.2em;
-      padding: 12px 30px;
-      background: linear-gradient(to right, #80d0c7, #13547a);
-      border-radius: 12px;
-      border: none;
-      color: white;
-      cursor: pointer;
-      margin: 10px;
-      transition: all 0.3s ease;
-      box-shadow: 0 5px 10px rgba(0,0,0,0.15);
-      min-width: 180px;
-    }
-    .draw-button:hover {
-      background: linear-gradient(to right, #13547a, #80d0c7);
-      transform: translateY(-2px);
-    }
-    .result-box {
-      margin-top: 20px;
-      padding: 15px;
-      background: #ffffff;
-      border: 1px solid #ccc;
-      border-radius: 10px;
-      white-space: pre-wrap;
-    }
-    .stats-box {
-      margin-top: 10px;
-      padding: 10px;
-      background: #f9f9ff;
-      border: 1px dashed #aaa;
-      border-radius: 8px;
-      font-size: 0.95em;
-      text-align: left;
-      display: flex;
-      justify-content: space-between;
-      gap: 40px;
-    }
-    .stats-box ul {
-      list-style: none;
-      padding-left: 0;
-      margin-top: 0.5em;
-    }
-    .stats-box li {
-      margin: 4px 0;
-    }
-    .history-box {
-      max-height: 200px;
-      overflow-y: auto;
-      margin-top: 10px;
-      text-align: left;
-      padding: 10px;
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-    }
-    .ss-bg { background-color: gold; color: black; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
-    .s-bg { background-color: #ff6600; color: white; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
-    .epic-tag { background-color: #ffd700; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold; }
-    .legend-tag { background-color: #00cc66; color: black; padding: 2px 6px; border-radius: 5px; font-weight: bold; }
-  
-    /* 星空背景動畫 */
-    body {
       background: #000;
       overflow: hidden;
+      margin: 0;
+      padding: 0;
     }
 
     canvas#bgCanvas {
@@ -90,18 +24,157 @@
       left: 0;
       z-index: -1;
     }
-	
-    
-    h1 {
+
+    .container {
+      max-width: 800px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+      box-sizing: border-box;
+      text-align: center;
       color: white;
     }
-    </style>
-<script src="beast_data.js"></script>
-<script src="rare_judge.js"></script>
-<script src="draw_logic.js"></script>
+
+    h1 {
+      color: white;
+      font-size: 2em;
+    }
+
+    .draw-reset-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .draw-button {
+      flex: 1 1 45%;
+      font-size: 1.1em;
+      padding: 12px 20px;
+      background: linear-gradient(to right, #80d0c7, #13547a);
+      border-radius: 12px;
+      border: none;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 5px 10px rgba(0,0,0,0.15);
+      max-width: 180px;
+      min-width: 120px;
+    }
+
+    .draw-button:hover {
+      background: linear-gradient(to right, #13547a, #80d0c7);
+      transform: translateY(-2px);
+    }
+
+    .result-box {
+      margin-top: 20px;
+      padding: 15px;
+      background: #ffffff;
+      color: #000;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      white-space: pre-wrap;
+    }
+
+    .stats-box {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f9f9ff;
+      color: #000;
+      border: 1px dashed #aaa;
+      border-radius: 8px;
+      font-size: 0.95em;
+      text-align: left;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .stats-box ul {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 0.5em;
+    }
+
+    .stats-box li {
+      margin: 4px 0;
+    }
+
+    .history-box {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 10px;
+      text-align: left;
+      padding: 10px;
+      background: #fff;
+      color: #000;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .ss-bg { background-color: gold; color: black; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
+    .s-bg { background-color: #ff6600; color: white; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
+    .epic-tag { background-color: #ffd700; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold; }
+    .legend-tag { background-color: #00cc66; color: black; padding: 2px 6px; border-radius: 5px; font-weight: bold; }
+
+    /* 響應式設計 */
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 1.5em;
+      }
+
+      .draw-button {
+        font-size: 1em;
+        padding: 10px 15px;
+        flex: 1 1 100%;
+      }
+
+      .stats-box {
+        flex-direction: column;
+        font-size: 0.9em;
+      }
+    }
+  </style>
 </head>
 <body>
 <canvas id="bgCanvas"></canvas>
+
+<div class="container">
+  <h1>萌獸卡牌包</h1>
+  <div class="draw-reset-wrap">
+    <button class="draw-button" onclick="drawBeast()">點此抽卡</button>
+    <button class="draw-button" onclick="resetData()">清除資料</button>
+    <button class="draw-button" onclick="autoDrawUntilSS()">直到抽到 SS</button>
+    <button class="draw-button" onclick="confirmDrawUntilSSLegend()">直到抽到 SS 且 傳說</button>
+    <button class="draw-button" onclick="startFastDrawUntilSSLegend()">快速連抽直到 SS 且 傳說</button>
+    <button class="draw-button" onclick="stopFastDraw()">停止快速抽卡</button>
+  </div>
+  <div class="result-box" id="result">請點選上方按鈕抽選</div>
+  <div class="stats-box" id="stats">
+    <div>
+      <div>抽卡數：<span id="totalCount">0</span></div>
+      <ul>
+        <li>SS：<span id="ssCount">0</span>（<span id="ssPct">0.00%</span>）</li>
+        <li>S：<span id="sCount">0</span>（<span id="sPct">0.00%</span>）</li>
+        <li>A：<span id="aCount">0</span>（<span id="aPct">0.00%</span>）</li>
+        <li>B：<span id="bCount">0</span>（<span id="bPct">0.00%</span>）</li>
+      </ul>
+    </div>
+    <div>
+      <ul>
+        <li>特殊：<span id="specialCount">0</span>（<span id="specialPct">0.00%</span>）</li>
+        <li>稀有：<span id="rareCount">0</span>（<span id="rarePct">0.00%</span>）</li>
+        <li>罕見：<span id="epicCount">0</span>（<span id="epicPct">0.00%</span>）</li>
+        <li>傳說：<span id="legendCount">0</span>（<span id="legendPct">0.00%</span>）</li>
+      </ul>
+    </div>
+  </div>
+  <div class="history-box" id="history"></div>
+</div>
+
 <script>
   const canvas = document.getElementById("bgCanvas");
   const ctx = canvas.getContext("2d");
@@ -144,35 +217,9 @@
 
   animate();
 </script>
-<div class="container">
-<h1>萌獸卡牌包</h1>
-<div class="draw-reset-wrap">
-<button class="draw-button" onclick="drawBeast()">點此抽卡</button>
-<button class="draw-button" onclick="resetData()">清除資料</button>
-<button class="draw-button" onclick="autoDrawUntilSS()">直到抽到 SS</button>
-<button class="draw-button" onclick="confirmDrawUntilSSLegend()">直到抽到 SS 且 傳說</button></div>
-<div class="result-box" id="result">請點選上方按鈕抽選</div>
-<div class="stats-box" id="stats">
-<div>
-<div>抽卡數：<span id="totalCount">0</span></div>
-<ul>
-<li>SS：<span id="ssCount">0</span>（<span id="ssPct">0.00%</span>）</li>
-<li>S：<span id="sCount">0</span>（<span id="sPct">0.00%</span>）</li>
-<li>A：<span id="aCount">0</span>（<span id="aPct">0.00%</span>）</li>
-<li>B：<span id="bCount">0</span>（<span id="bPct">0.00%</span>）</li>
-</ul>
-</div>
-<div>
-<ul>
-<li>特殊：<span id="specialCount">0</span>（<span id="specialPct">0.00%</span>）</li>
-<li>稀有：<span id="rareCount">0</span>（<span id="rarePct">0.00%</span>）</li>
-<li>罕見：<span id="epicCount">0</span>（<span id="epicPct">0.00%</span>）</li>
-<li>傳說：<span id="legendCount">0</span>（<span id="legendPct">0.00%</span>）</li>
-</ul>
-</div>
-</div>
-<div class="history-box" id="history"></div>
-</div>
+
+<!-- 抽卡邏輯保持不變，使用原來的 JS 函式 drawBeast() 等 -->
+<!-- 你可以將原本 script 區塊複製下來放在這裡或原檔中連結使用 -->
 <script>
   let total = 0;
   let count = { SS: 0, S: 0, A: 0, B: 0 };
@@ -234,59 +281,95 @@
     });
   }
 
-  
-function autoDrawUntilSS() {
-  let foundSS = false;
+  function autoDrawUntilSS() {
+    let foundSS = false;
 
-  while (!foundSS) {
+    while (!foundSS) {
+      const results = [drawByPosition(1), drawByPosition(2), drawByPosition(3)];
+      let html = "你抽中了：\n";
+
+      results.forEach((r, i) => {
+        if (!r) return;
+        const rarity = r.item.rarity;
+        const level = r.level;
+        const rarityClass = rarity.toLowerCase() + "-bg";
+
+        total++;
+        count[rarity]++;
+        levelCount[level]++;
+
+        const line = `❶❷❸`[i] + ` <span class="${rarityClass}">${r.item.name}</span>（${level}）`;
+        html += line + "\n";
+
+        const div = document.createElement('div');
+        div.innerHTML = `${total}. ${line}`;
+        document.getElementById('history').prepend(div);
+
+        if (rarity === 'SS') {
+          foundSS = true;
+        }
+      });
+
+      document.getElementById('result').innerHTML = html;
+      updateStats();
+    }
+  }
+
+  function autoDrawUntilSSLegend() {
+    let found = false;
+
+    while (!found) {
+      const results = [drawByPosition(1), drawByPosition(2), drawByPosition(3)];
+      let html = "你抽中了：\n";
+
+      results.forEach((r, i) => {
+        if (!r) return;
+        const rarity = r.item.rarity;
+        const level = r.level;
+
+        let rarityClass = "";
+        if (rarity === "SS") rarityClass = "ss-bg";
+        else if (rarity === "S") rarityClass = "s-bg";
+
+        let levelSpan = level;
+        if (level === "罕見") levelSpan = '<span class="epic-tag">罕見</span>';
+        else if (level === "傳說") levelSpan = '<span class="legend-tag">傳說</span>';
+
+        total++;
+        count[rarity]++;
+        levelCount[level]++;
+
+        const nameHtml = rarityClass ? `<span class="${rarityClass}">${r.item.name}</span>` : r.item.name;
+        const line = `❶❷❸`[i] + ` ${nameHtml}（${levelSpan}）`;
+        html += line + "\n";
+
+        const div = document.createElement('div');
+        div.innerHTML = `${total}. ${line}`;
+        document.getElementById('history').prepend(div);
+
+        if (rarity === 'SS' && level === '傳說') {
+          found = true;
+        }
+      });
+
+      document.getElementById('result').innerHTML = html;
+      updateStats();
+    }
+  }
+let isDrawing = false;
+let drawIntervalId = null;
+
+function startFastDrawUntilSSLegend() {
+  if (isDrawing) {
+    alert("抽卡進行中，請先停止再重新開始！");
+    return;
+  }
+
+  isDrawing = true;
+  drawIntervalId = setInterval(() => {
     const results = [drawByPosition(1), drawByPosition(2), drawByPosition(3)];
     let html = "你抽中了：\n";
-
-    results.forEach((r, i) => {
-      if (!r) return;
-      const rarity = r.item.rarity;
-      const level = r.level;
-      const rarityClass = rarity.toLowerCase() + "-bg";
-
-      total++;
-      count[rarity]++;
-      levelCount[level]++;
-
-      const line = `❶❷❸`[i] + ` <span class="${rarityClass}">${r.item.name}</span>（${level}）`;
-      html += line + "\n";
-
-      const div = document.createElement('div');
-      div.innerHTML = `${total}. ${line}`;
-      //div.style.color = 'white';
-      document.getElementById('history').prepend(div);
-
-      if (rarity === 'SS') {
-        foundSS = true;
-      }
-    });
-
-    document.getElementById('result').innerHTML = html;
-    updateStats();
-  }
-}
-
-
-function resetData() {
-    total = 0;
-    count = { SS: 0, S: 0, A: 0, B: 0 };
-    levelCount = { 特殊: 0, 稀有: 0, 罕見: 0, 傳說: 0 };
-    updateStats();
-    document.getElementById('result').innerText = '請點選上方按鈕抽選';
-    document.getElementById('history').innerHTML = '';
-  }
-</script>
-<script>
-function autoDrawUntilSSLegend() {
-  let found = false;
-
-  while (!found) {
-    const results = [drawByPosition(1), drawByPosition(2), drawByPosition(3)];
-    let html = "你抽中了：\n";
+    let found = false;
 
     results.forEach((r, i) => {
       if (!r) return;
@@ -320,14 +403,39 @@ function autoDrawUntilSSLegend() {
 
     document.getElementById('result').innerHTML = html;
     updateStats();
+
+    if (found) {
+      clearInterval(drawIntervalId);
+      isDrawing = false;
+      drawIntervalId = null;
+      alert("🎉 已抽到 SS 且 傳說！");
+    }
+  }, 0);
+}
+
+function stopFastDraw() {
+  if (isDrawing && drawIntervalId) {
+    clearInterval(drawIntervalId);
+    drawIntervalId = null;
+    isDrawing = false;
+    alert("⛔ 已手動停止快速抽卡。");
+  } else {
+    alert("目前沒有正在進行的快速抽卡。");
   }
 }
-</script><script>
-function confirmDrawUntilSSLegend() {
-  const proceed = confirm("此操作可能導致瀏覽器無回應，是否繼續抽取直到獲得 SS 且 傳說？");
-  if (proceed) {
-    autoDrawUntilSSLegend();
+  function confirmDrawUntilSSLegend() {
+    const proceed = confirm("此操作可能導致瀏覽器無回應，是否繼續抽取直到獲得 SS 且 傳說？");
+    if (proceed) {
+      autoDrawUntilSSLegend();
+    }
   }
-}
-</script></body>
-</html>
+
+  function resetData() {
+    total = 0;
+    count = { SS: 0, S: 0, A: 0, B: 0 };
+    levelCount = { 特殊: 0, 稀有: 0, 罕見: 0, 傳說: 0 };
+    updateStats();
+    document.getElementById('result').innerText = '請點選上方按鈕抽選';
+    document.getElementById('history').innerHTML = '';
+  }
+</script>
