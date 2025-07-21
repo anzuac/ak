@@ -155,6 +155,8 @@
   </div>
 
 <script>
+let isAutoDrawing = false;
+let isDrawing = false;
   let totalDrawCount = 0;
 let lastDrawnOptions = [];
 
@@ -300,44 +302,55 @@ function updateStatWithPercentage(id, count) {
     updateStatWithPercentage("count_triple_buff", count_triple_buff);
 }
 function drawUntilTarget() {
-    const targets = [
-      document.getElementById("target1").value,
-      document.getElementById("target2").value,
-      document.getElementById("target3").value
-    ].filter(v => v && !v.includes("請選擇"));
-
-    if (targets.length === 0) {
-      alert("請至少選擇一個目標詞條！");
+  if (isDrawing) {
+    alert("抽卡進行中，請先停止或等待完成！");
+    return;
+  }
+  
+  const targets = [
+    document.getElementById("target1").value,
+    document.getElementById("target2").value,
+    document.getElementById("target3").value
+  ].filter(v => v && !v.includes("請選擇"));
+  
+  if (targets.length === 0) {
+    alert("請至少選擇一個目標詞條！");
+    return;
+  }
+  
+  isAutoDrawing = true;
+  isDrawing = true;
+  
+  function matchTarget(names, targets) {
+    const nameCount = {};
+    names.forEach(n => nameCount[n] = (nameCount[n] || 0) + 1);
+    for (let t of targets) {
+      if (!nameCount[t]) return false;
+      nameCount[t]--;
+    }
+    return true;
+  }
+  
+  function loopDraw() {
+    if (!isAutoDrawing) {
+      isDrawing = false;
       return;
     }
-
-    isAutoDrawing = true;
-
-    function matchTarget(names, targets) {
-      const nameCount = {};
-      names.forEach(n => nameCount[n] = (nameCount[n] || 0) + 1);
-      for (let t of targets) {
-        if (!nameCount[t]) return false;
-        nameCount[t]--;
-      }
-      return true;
+    
+    drawOnce();
+    const drawnNames = lastDrawnOptions.map(r => r.name);
+    if (matchTarget(drawnNames, targets)) {
+      isAutoDrawing = false;
+      isDrawing = false;
+      alert("🎯 達成目標條件！");
+      return;
     }
-
-    function loopDraw() {
-      if (!isAutoDrawing) return;
-      if (!isAutoDrawing) return;
-      drawOnce();
-      const drawnNames = lastDrawnOptions.map(r => r.name);
-      if (matchTarget(drawnNames, targets)) {
-        isAutoDrawing = false;
-        alert("🎯 達成目標條件！");
-        return;
-      }
-      setTimeout(loopDraw, -1000);
-    }
-
-    loopDraw();
+    
+    setTimeout(loopDraw, 0); // 每 200ms 洗一次
   }
+  
+  loopDraw();
+}
 
   function clearStats() {
     totalDrawCount = 0;
