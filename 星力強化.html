@@ -349,7 +349,7 @@ document.getElementById("simulate-auto").addEventListener("click", async () => {
     const { to, result } = getNext(star);
     if (result.includes("爆炸") && stopOnBoom) break;
     star = to;
-    await delay(50); // 每次模擬間隔 50ms，防止瀏覽器當機
+    await delay(1); // 每次模擬間隔 50ms，防止瀏覽器當機
   }
 
   // 統計結果顯示
