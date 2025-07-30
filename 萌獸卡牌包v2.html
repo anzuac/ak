@@ -162,7 +162,7 @@
   <div class="draw-reset-wrap">
     <button class="draw-button" onclick="drawBeast()">點此抽卡</button>
     <button class="draw-button" onclick="resetData()">清除資料</button>
-    <button class="draw-button" onclick="autoDrawUntilSS()">抽到 傲天個怪</button>
+    <button class="draw-button" onclick="autoDrawUntilSS()">抽到 傲天怪</button>
     <button class="draw-button" onclick="confirmDrawUntilSSLegend()">抽到 傲天怪 且 傳說</button>
     <button class="draw-button" onclick="startFastDrawUntilSSLegend()">快速連抽傲天怪且 傳說</button>
     <button class="draw-button" onclick="stopFastDraw()">停止快速抽卡</button>
@@ -454,3 +454,8 @@ function stopFastDraw() {
     document.getElementById('history').innerHTML = '';
   }
 </script>
+fetch("https://api.countapi.xyz/hit/anzu-simulator/total")
+  .then(res => res.json())
+  .then(data => {
+    document.getElementById("visitNum").textContent = data.value.toLocaleString();
+  });

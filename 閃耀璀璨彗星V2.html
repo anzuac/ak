@@ -485,5 +485,11 @@ function goBack() {
 }
 </script>
   </script>
+  
+  fetch("https://api.countapi.xyz/hit/anzu-simulator/total")
+  .then(res => res.json())
+  .then(data => {
+    document.getElementById("visitNum").textContent = data.value.toLocaleString();
+  });
 </body>
 </html>
