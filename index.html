@@ -102,21 +102,18 @@
   </div>
 
   <!-- ✅ 統計載入腳本 -->
-  <script>
-    const apiUrl = "https://script.google.com/macros/s/AKfycbzyNq-_CcGmVJkHd5CHBcWz9naWzACPnKbHCTGEhsl5VBJiPUw1BGHlyyZ6mJmI7RTD4w/exec";
-    
-    fetch(apiUrl)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.total !== undefined) {
-          document.getElementById("visitNum").textContent = data.total;
-        } else {
-          document.getElementById("visitNum").textContent = "錯誤";
-        }
-      })
-      .catch(() => {
-        document.getElementById("visitNum").textContent = "無法取得";
-      });
-  </script>
+  <div>目前總人次：<span id="visitNum">載入中...</span></div>
+
+<script>
+  fetch("https://script.google.com/macros/s/AKfycbxwQbyiBzWgYUzRXUbDipBlV04Xot1HnsMYsj3FoeKRMlVEgbV_K0y7WwFF7O_JtIFiOA/exec?page=首頁")
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById("visitNum").textContent = data.total ?? "無資料";
+    })
+    .catch(() => {
+      document.getElementById("visitNum").textContent = "錯誤";
+    });
+</script>
+
 </body>
 </html>
