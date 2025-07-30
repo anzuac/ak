@@ -140,6 +140,21 @@
   </style>
 </head>
 <body>
+  <a href="index.html" style="
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  background: #eee;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  text-decoration: none;
+  color: #333;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  z-index: 1000;
+">
+  🏠 回首頁
+</a>
 <canvas id="bgCanvas"></canvas>
 
 <div class="container">
@@ -147,9 +162,9 @@
   <div class="draw-reset-wrap">
     <button class="draw-button" onclick="drawBeast()">點此抽卡</button>
     <button class="draw-button" onclick="resetData()">清除資料</button>
-    <button class="draw-button" onclick="autoDrawUntilSS()">直到抽到 SS</button>
-    <button class="draw-button" onclick="confirmDrawUntilSSLegend()">直到抽到 SS 且 傳說</button>
-    <button class="draw-button" onclick="startFastDrawUntilSSLegend()">快速連抽直到 SS 且 傳說</button>
+    <button class="draw-button" onclick="autoDrawUntilSS()">抽到 傲天個怪</button>
+    <button class="draw-button" onclick="confirmDrawUntilSSLegend()">抽到 傲天怪 且 傳說</button>
+    <button class="draw-button" onclick="startFastDrawUntilSSLegend()">快速連抽傲天怪且 傳說</button>
     <button class="draw-button" onclick="stopFastDraw()">停止快速抽卡</button>
   </div>
   <div class="result-box" id="result">請點選上方按鈕抽選</div>
