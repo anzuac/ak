@@ -512,8 +512,15 @@ updateTargetResultVisibility();
 updateTargetHistoryVisibility();
 updateTargetStats();
 </script>
-fetch("https://api.countapi.xyz/hit/anzu-simulator/total")
-  .then(res => res.json())
-  .then(data => {
-    document.getElementById("visitNum").textContent = data.value.toLocaleString();
+<script>
+const apiUrl = "https://script.google.com/macros/s/AKfycbzyNq-_CcGmVJkHd5CHBcWz9naWzACPnKbHCTGEhsl5VBJiPUw1BGHlyyZ6mJmI7RTD4w/exec";
+const pageName = "皇家美容院V2"; // ← 修改為該分頁名稱！
+
+fetch(${apiUrl}?page=${encodeURIComponent(pageName)})
+  .then(() => {
+    // 成功送出，不需顯示內容
+  })
+  .catch(err => {
+    console.error("訪問記錄失敗：", err);
   });
+</script>
