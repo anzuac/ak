@@ -381,17 +381,13 @@ document.getElementById("stop-auto").addEventListener("click", () => {
 
 
   <script>
-<script>
 const apiUrl = "https://script.google.com/macros/s/AKfycbzyNq-_CcGmVJkHd5CHBcWz9naWzACPnKbHCTGEhsl5VBJiPUw1BGHlyyZ6mJmI7RTD4w/exec";
-const pageName = "星力強化"; // ← 修改為該分頁名稱！
+const pageName = "星力強化"; // ✅ 根據該頁實際名稱改掉
 
-fetch(${apiUrl}?page=${encodeURIComponent(pageName)})
-  .then(() => {
-    // 成功送出，不需顯示內容
-  })
-  .catch(err => {
-    console.error("訪問記錄失敗：", err);
-  });
+fetch(`${apiUrl}?page=${encodeURIComponent(pageName)}`)
+  .catch(err => console.error("統計上傳失敗", err));
+</script>
+
 </script>
 </script>
 </body>

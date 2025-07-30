@@ -456,13 +456,8 @@ function stopFastDraw() {
 </script>
 <script>
 const apiUrl = "https://script.google.com/macros/s/AKfycbzyNq-_CcGmVJkHd5CHBcWz9naWzACPnKbHCTGEhsl5VBJiPUw1BGHlyyZ6mJmI7RTD4w/exec";
-const pageName = "萌獸卡牌包"; // ← 修改為該分頁名稱！
+const pageName = "萌獸卡牌包v2";
+fetch(`${apiUrl}?page=${encodeURIComponent(pageName)}`).catch(console.error);
+</script>
 
-fetch(${apiUrl}?page=${encodeURIComponent(pageName)})
-  .then(() => {
-    // 成功送出，不需顯示內容
-  })
-  .catch(err => {
-    console.error("訪問記錄失敗：", err);
-  });
 </script>

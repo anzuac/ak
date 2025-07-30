@@ -488,15 +488,9 @@ function goBack() {
   
   <script>
 const apiUrl = "https://script.google.com/macros/s/AKfycbzyNq-_CcGmVJkHd5CHBcWz9naWzACPnKbHCTGEhsl5VBJiPUw1BGHlyyZ6mJmI7RTD4w/exec";
-const pageName = "閃耀彗星V2"; // ← 修改為該分頁名稱！
-
-fetch(${apiUrl}?page=${encodeURIComponent(pageName)})
-  .then(() => {
-    // 成功送出，不需顯示內容
-  })
-  .catch(err => {
-    console.error("訪問記錄失敗：", err);
-  });
+const pageName = "閃耀璀璨V2";
+fetch(`${apiUrl}?page=${encodeURIComponent(pageName)}`).catch(console.error);
 </script>
+
 </body>
 </html>
