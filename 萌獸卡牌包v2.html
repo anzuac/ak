@@ -170,7 +170,10 @@
   <div class="result-box" id="result">請點選上方按鈕抽選</div>
   <div class="stats-box" id="stats">
     <div>
-      <div>抽卡數：<span id="totalCount">0</span></div>
+     <div>
+  抽卡數：<span id="totalCount">0</span><br>
+  總花費：<span id="totalCost">0</span> 元
+</div>
       <ul>
         <li>SS：<span id="ssCount">0</span>（<span id="ssPct">0.00%</span>）</li>
         <li>S：<span id="sCount">0</span>（<span id="sPct">0.00%</span>）</li>
@@ -291,11 +294,20 @@
         '罕見': 'epic',
         '傳說': 'legend'
       }[l];
+	  
+  const totalPacks = Math.ceil(total / 3);  
+  const groupsOfTen = Math.floor(totalPacks / 10);
+  const remaining = totalPacks % 10;
+  const totalCost = groupsOfTen * 270 + remaining * 30;
+  document.getElementById('totalCost').textContent = totalCost;
+  
       document.getElementById(id + 'Count').textContent = num;
       document.getElementById(id + 'Pct').textContent = pct + '%';
+	  
     });
   }
-
+  
+  
   function autoDrawUntilSS() {
     let foundSS = false;
 
