@@ -91,29 +91,35 @@
       </div>
     </div>
 
-    <!-- ✅ 統計顯示區 -->
-    <div style="margin-top: 20px; color: #aaa; font-size: 0.95em;">
-      👀 所有模擬器總訪問次數：<span id="visitNum">載入中...</span>
+    <!-- 🔢 顯示總訪問次數 -->
+    <div style="margin-top: 20px; color: #888; font-size: 0.95em;">
+      ~所有模擬器總訪問次數：<span id="visitNum">載入中...</span>
     </div>
 
     <footer>
-      &copy; 2025 遊戲模擬首頁設計 ANZU 
+      &copy; 2025 遊戲模擬首頁設計 ANZU
     </footer>
   </div>
 
-  <!-- ✅ 統計載入腳本 -->
-  <div>目前總人次：<span id="visitNum">載入中...</span></div>
+  <!-- ✅ Google Apps Script 統計 JS -->
+  <script>
+    const apiUrl = "https://script.google.com/macros/s/AKfycbxwQbyiBzWgYUzRXUbDipBlV04Xot1HnsMYsj3FoeKRMlVEgbV_K0y7WwFF7O_JtIFiOA/exec";
+    const pageName = "首頁";
 
-<script>
-  fetch("https://script.google.com/macros/s/AKfycbxwQbyiBzWgYUzRXUbDipBlV04Xot1HnsMYsj3FoeKRMlVEgbV_K0y7WwFF7O_JtIFiOA/exec?page=首頁")
-    .then(res => res.json())
-    .then(data => {
-      document.getElementById("visitNum").textContent = data.total ?? "無資料";
-    })
-    .catch(() => {
-      document.getElementById("visitNum").textContent = "錯誤";
-    });
-</script>
-
+    // 顯示總次數用（僅首頁）
+    fetch(`${apiUrl}?page=${encodeURIComponent(pageName)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.total !== undefined) {
+          document.getElementById("visitNum").textContent = data.total;
+        } else {
+          document.getElementById("visitNum").textContent = "錯誤";
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById("visitNum").textContent = "無法取得";
+      });
+  </script>
 </body>
 </html>
