@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>魔法靈氣模擬器</title>
+   
+  <style>
+    body {
+      font-family: "Microsoft JhengHei", sans-serif;
+      background: #ffeceb;
+      margin: 0;
+      padding: 2em;
+      display: flex;
+      justify-content: center;
+    }
+    .cube-box {
+      background: #fbb9a7;
+      padding: 2em;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 600px;
+    }
+    .title {
+      font-size: 1.8em;
+      font-weight: bold;
+      margin-bottom: 1em;
+    }
+    .btn-row, .control-row {
+      display: flex;
+      justify-content: center;
+      gap: 1em;
+      margin-bottom: 1em;
+      flex-wrap: wrap;
+    }
+    .btn, .setting-btn {
+      padding: 0.6em 1.5em;
+      font-size: 1rem;
+      background-color: #f15a29;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 4px 0 #b53c1c;
+      cursor: pointer;
+    }
+    .setting-btn {
+      background-color: #666;
+      box-shadow: none;
+    }
+    select {
+      padding: 0.5em;
+      font-size: 1rem;
+      width: 70%;
+      margin: 0.3em auto;
+      display: block;
+    }
+    .result-area {
+      background: #fff6f5;
+      min-height: 100px;
+      border-radius: 12px;
+      padding: 1em;
+      font-size: 1.1rem;
+      color: #333;
+      margin-bottom: 1em;
+    }
+    .stat-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1em;
+}
+.stat-column {
+  width: 48%;
+  background: #fff;
+  padding: 0.8em;
+  border-radius: 6px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  font-size: 0.95em;
+}
+.stat-column strong {
+  display: block;
+  margin-bottom: 0.5em;
+}
+    .stats-section {
+      background: #fff6f5;
+      padding: 1em;
+      border-radius: 12px;
+      margin-top: 1em;
+    }
+  </style>
+</head>
+
+<body>
+  
+  <div class="cube-box">
+    <button onclick="location.href='index.html'" style="font-size: 1em; margin-bottom: 10px;">
+  ⬅️ 回首頁
+</button>
+    <div class="title">內襯方塊模擬器</div>
+<div class="title">機率僅供參考 說不定會發生錯誤等問題 還在測試</div>
+    <!-- 潛能等級選擇 -->
+    <select id="startTierSelect">
+      <option value="特殊">初始潛能：特殊</option>
+      <option value="稀有">初始潛能：稀有</option>
+      <option value="罕見">初始潛能：罕見</option>
+      <option value="傳說">初始潛能：傳說</option>
+    </select>
+
+    <!-- 目標詞條選擇 -->
+    <select id="target1"><option>請選擇目標詞條 1</option></select>
+    <select id="target2"><option>請選擇目標詞條 2</option></select>
+    <select id="target3"><option>請選擇目標詞條 3</option></select>
+
+    <!-- 顯示三條潛能 -->
+    <div class="result-area" id="resultArea">
+      <div id="actualTier">潛能階級：-</div>
+      <div id="potential1">---</div>
+      <div id="potential2">---</div>
+      <div id="potential3">---</div>
+    </div>
+
+    <!-- 控制按鈕 -->
+    <div class="btn-row">
+      <button class="btn" onclick="drawOnce()">洗一次</button>
+      <button class="setting-btn" onclick="drawUntilTarget()">洗到目標</button>
+      <button class="setting-btn" onclick="drawUntilUpgrade()">洗到跳框</button>
+      <button class="setting-btn" onclick="drawUntilLegendary()">洗到傳說</button>
+      
+    </div>
+
+    <!-- 清除 / 停止 -->
+    <div class="control-row">
+      <button class="btn" onclick="clearStats()">清除統計</button>
+      <button class="btn" onclick="forceStop()">強制停止</button>
+    </div>
+
+    <!-- 統計資訊 -->
+   <div class="stats-section">
+  <div>總洗方塊次數：<span id="totalDraw">0</span></div>
+  
+  <ul style="margin: 0; padding-left: 1.2em; font-size: 0.95em;">
+    <div>
+  <div id="rate-special">特殊 → 稀有：0 次（0%）</div>
+  <div id="rate-rare">稀有 → 罕見：0 次（0%）</div>
+  <div id="rate-epic">罕見 → 傳說：0 次（0%）</div>
+</div>
+  </ul>
+</div>
+<!-- ✅ 傳說潛能統計區 -->
+<div class="stats-section" id="statSummaryContainer">
+  <h3 style="margin-top: 0;">✨ 傳說潛能統計</h3>
+  <div id="legendaryDrawCount">傳說階級總洗出方塊數量：0</div>
+<h4>第一排</h4>
+<div class="stat-row">
+  <div class="stat-column">
+    <strong>攻擊力：</strong><br>
+    +20：<span id="atk1_20">0</span>（<span id="atk1_20_pct">0%</span>）<br>
+    +15：<span id="atk1_15">0</span>（<span id="atk1_15_pct">0%</span>）<br>
+    +13：<span id="atk1_13">0</span>（<span id="atk1_13_pct">0%</span>）<br>
+    +10：<span id="atk1_10">0</span>（<span id="atk1_10_pct">0%</span>）
+  </div>
+  <div class="stat-column">
+    <strong>魔法攻擊力：</strong><br>
+    +20：<span id="matk1_20">0</span>（<span id="matk1_20_pct">0%</span>）<br>
+    +15：<span id="matk1_15">0</span>（<span id="matk1_15_pct">0%</span>）<br>
+    +13：<span id="matk1_13">0</span>（<span id="matk1_13_pct">0%</span>）<br>
+    +10：<span id="matk1_10">0</span>（<span id="matk1_10_pct">0%</span>）
+  </div>
+</div>
+  
+  <h4>第二排</h4>
+  <div class="stat-row">
+    <div class="stat-column">
+      <strong>攻擊力：</strong><br>
+      +20：<span id="atk2_20">0</span>（<span id="atk2_20_pct">0%</span>）<br>
+      +15：<span id="atk2_15">0</span>（<span id="atk2_15_pct">0%</span>）<br>
+      +13：<span id="atk2_13">0</span>（<span id="atk2_13_pct">0%</span>）<br>
+      +10：<span id="atk2_10">0</span>（<span id="atk2_10_pct">0%</span>）
+    </div>
+    <div class="stat-column">
+      <strong>魔法攻擊力：</strong><br>
+      +20：<span id="matk2_20">0</span>（<span id="matk2_20_pct">0%</span>）<br>
+      +15：<span id="matk2_15">0</span>（<span id="matk2_15_pct">0%</span>）<br>
+      +13：<span id="matk2_13">0</span>（<span id="matk2_13_pct">0%</span>）<br>
+      +10：<span id="matk2_10">0</span>（<span id="matk2_10_pct">0%</span>）
+    </div>
+  </div>
+  
+  <h4>第三排</h4>
+  <div class="stat-row">
+    <div class="stat-column">
+      <strong>攻擊力：</strong><br>
+      +20：<span id="atk3_20">0</span>（<span id="atk3_20_pct">0%</span>）<br>
+      +15：<span id="atk3_15">0</span>（<span id="atk3_15_pct">0%</span>）<br>
+      +13：<span id="atk3_13">0</span>（<span id="atk3_13_pct">0%</span>）<br>
+      +10：<span id="atk3_10">0</span>（<span id="atk3_10_pct">0%</span>）
+    </div>
+    <div class="stat-column">
+      <strong>魔法攻擊力：</strong><br>
+      +20：<span id="matk3_20">0</span>（<span id="matk3_20_pct">0%</span>）<br>
+      +15：<span id="matk3_15">0</span>（<span id="matk3_15_pct">0%</span>）<br>
+      +13：<span id="matk3_13">0</span>（<span id="matk3_13_pct">0%</span>）<br>
+      +10：<span id="matk3_10">0</span>（<span id="matk3_10_pct">0%</span>）
+    </div>
+  </div>
+</div>
+  </div>
+
+  <!-- ✅ 載入 JS（順序不能錯） -->
+  <script src="potential_data.js"></script>
+  <script src="potential_cube.js"></script>
+
+  <!-- ✅ 初始化目標選單 -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const allOptions = [
+        ...potentialData_special,
+        ...potentialData_rare,
+        ...potentialData_epic,
+        ...potentialData_legendary
+      ];
+      const selects = [
+        document.getElementById("target1"),
+        document.getElementById("target2"),
+        document.getElementById("target3")
+      ];
+      for (let select of selects) {
+        for (let opt of allOptions) {
+          const option = document.createElement("option");
+          option.value = opt.name;
+          option.textContent = opt.name;
+          select.appendChild(option);
+        }
+      }
+    });
+  </script>
+  
+</body>
+</html>
+
+<script>
+  fetch("https://script.google.com/macros/s/AKfycbxwQbyiBzWgYUzRXUbDipBlV04Xot1HnsMYsj3FoeKRMlVEgbV_K0y7WwFF7O_JtIFiOA/exec?page=皇家美容院V2");
+</script>
