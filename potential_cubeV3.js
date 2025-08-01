@@ -93,14 +93,32 @@ function rollPotential(baseTier) {
   };
 }
 
+let currentTier = null; // 🔁 建議放在檔案全域最上面，只需定義一次
+
 function updatePotentialUI({ results, tier }) {
   document.getElementById("potential1").textContent = results[0];
   document.getElementById("potential2").textContent = results[1];
   document.getElementById("potential3").textContent = results[2];
   document.getElementById("actualTier").textContent = `潛能階級：${tier}`;
   document.getElementById("startTierSelect").value = tier;
+  
+  // ✅ 僅當階級改變時才更新下拉選單與取消選擇
+  if (tier !== currentTier) {
+    updateTargetOptionsByTier();
+    ["target1", "target2", "target3"].forEach(id => {
+      const select = document.getElementById(id);
+      if (select) select.selectedIndex = -1; // 強制清除使用者選擇
+    });
+    currentTier = tier;
+  }
 }
 
+
+function calculateCost(draws) {
+  const setsOfTen = Math.floor(draws / 10);
+  const remaining = draws % 10;
+  return setsOfTen * 450 + remaining * 50;
+}
 function updateStats() {
   document.getElementById("totalDraw").textContent = totalDraws;
 
@@ -141,7 +159,11 @@ document.getElementById("legendaryDrawCount").textContent = `傳說階級總洗�
     }
   }
 }
+// ✅ 加入洗潛能金額計算與顯示
+const cost = calculateCost(totalDraws);
+document.getElementById("totalCost").textContent = `總花費金額：${cost} 元`;
 }
+
 
 function drawOnce() {
   if (forceStopFlag) return;
@@ -222,13 +244,9 @@ function skipToLegendary() {
 
 // ✅ 防呆檢查：第一條目標不能選擇無法抽出的潛能
 function getInvalidFirstOptions() {
-  const allOptions = [
-    ...potentialData_special,
-    ...potentialData_rare,
-    ...potentialData_epic,
-    ...potentialData_legendary
-  ];
-  return allOptions
+  const baseTier = document.getElementById("startTierSelect").value;
+  const pool = potentialPools[baseTier];
+  return pool
     .filter(opt => !opt.weights || opt.weights[0] === 0)
     .map(opt => opt.name);
 }
@@ -236,48 +254,69 @@ function getInvalidFirstOptions() {
 function drawUntilTarget() {
   forceStopFlag = false;
   const baseTier = document.getElementById("startTierSelect").value;
-function getSelectedValues(selectId) {
-  const select = document.getElementById(selectId);
-  return Array.from(select.selectedOptions).map(opt => opt.value);
-}
-
-const targets1 = getSelectedValues("target1");
-const targets2 = getSelectedValues("target2");
-const targets3 = getSelectedValues("target3");
+  
+  function getSelectedValues(selectId) {
+    const select = document.getElementById(selectId);
+    return Array.from(select.selectedOptions).map(opt => opt.value);
+  }
+  
+  const targets1 = getSelectedValues("target1");
+  const targets2 = getSelectedValues("target2");
+  const targets3 = getSelectedValues("target3");
   
   const invalidFirstOptions = getInvalidFirstOptions();
   if (targets1.some(opt => invalidFirstOptions.includes(opt))) {
-  alert("⚠️ 選擇的第一條目標潛能在任何階段都無法出現，請重新選擇！");
-  return;
-}
+    alert("⚠️ 選擇的第一條目標潛能在任何階段都無法出現，請重新選擇！");
+    return;
+  }
   
   let currentTier = baseTier;
   const batchSize = 1000;
+  const maxAttempts = 5000000000;
+  let attempts = 0;
+  let found = false;
   
   function simulateBatch() {
-    if (forceStopFlag) return;
+    if (forceStopFlag || found || attempts >= maxAttempts) {
+      if (attempts >= maxAttempts) {
+        alert("⚠️ 模擬已達 50 萬次仍未達成，請檢查條件！");
+      }
+      return;
+    }
     
+    let result;
     for (let i = 0; i < batchSize; i++) {
-      const result = rollPotential(currentTier);
+      result = rollPotential(currentTier);
       totalDraws++;
+      attempts++;
+      
       analyzeStats(result.results, result.tier);
       
       const [r1, r2, r3] = result.results;
-     const match1 = (targets1.length === 0 || targets1.includes(r1));
-const match2 = (targets2.length === 0 || targets2.includes(r2));
-const match3 = (targets3.length === 0 || targets3.includes(r3));
+      const match1 = (targets1.length === 0 || targets1.includes(r1));
+      const match2 = (targets2.length === 0 || targets2.includes(r2));
+      const match3 = (targets3.length === 0 || targets3.includes(r3));
       
-      if (match1 && match2 && match3) {
+      if (result.tier !== currentTier) {
         updatePotentialUI(result);
         updateStats();
-        return;
+        return; // 停止模擬（跳框）
       }
       
-      currentTier = result.tier;
+      if (match1 && match2 && match3) {
+        found = true;
+        break;
+      }
     }
     
-    updateStats(); // 每批次結束更新一次統計 UI
-    setTimeout(simulateBatch, 0); // 下一批
+    // 批次模擬後更新畫面與統計
+    updatePotentialUI(result);
+    updateStats();
+    
+    if (found) return;
+    
+    // 非同步執行下一批
+    setTimeout(simulateBatch, 0);
   }
   
   simulateBatch();
@@ -302,6 +341,7 @@ tierJumpStats["罕見>傳說"] = 0;
 tierAttemptCount["特殊"] = 0;
 tierAttemptCount["稀有"] = 0;
 tierAttemptCount["罕見"] = 0;
+document.getElementById("totalCost").textContent = "總花費金額：0 元";
 legendaryDrawCount = 0;
 document.getElementById("legendaryDrawCount").textContent = "傳說階級總洗出方塊數量：0";
 ["target1", "target2", "target3"].forEach(id => {
@@ -347,24 +387,37 @@ if (true) {
 function updateTargetOptionsByTier() {
   const baseTier = document.getElementById("startTierSelect").value;
   const pool = potentialPools[baseTier];
+  const validNames = new Set(pool.map(p => p.name));
+
   const selects = [
     document.getElementById("target1"),
     document.getElementById("target2"),
     document.getElementById("target3")
   ];
 
-  for (let select of selects) {
-   select.innerHTML = ''; // 不加任何預設
+  for (let i = 0; i < selects.length; i++) {
+    const select = selects[i];
+    const prevSelected = Array.from(select.selectedOptions).map(opt => opt.value);
+    
+    // 清除選項
+    select.innerHTML = '';
+
     for (let opt of pool) {
-      if (!opt.weights || opt.weights.every(w => w === 0)) continue;
+      if (!opt.weights || !opt.weights.some(w => w > 0)) continue;
 
       const option = document.createElement("option");
       option.value = opt.name;
       option.textContent = opt.name;
 
-      if (select === selects[0] && (!opt.weights[0] || opt.weights[0] === 0)) {
+      // ✅ 第一條禁用無法抽出的潛能
+      if (i === 0 && (!opt.weights[0] || opt.weights[0] === 0)) {
         option.disabled = true;
         option.textContent += "（無法作為第一條）";
+      }
+
+      // ✅ 若使用者原先選過、而此潛能仍合法，則保留勾選
+      if (prevSelected.includes(opt.name)) {
+        option.selected = true;
       }
 
       select.appendChild(option);

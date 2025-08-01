@@ -96,7 +96,7 @@
   ⬅️ 回首頁
 </button>
     <div class="title">內襯方塊模擬器</div>
-<div class="title">電腦版本請搭配CTRL 實現多選功能 </div>
+<div class="title">機率僅供參考 說不定會發生錯誤等問題 還在測試</div>
     <!-- 潛能等級選擇 -->
     <select id="startTierSelect">
       <option value="特殊">初始潛能：特殊</option>
@@ -136,6 +136,7 @@
     <!-- 統計資訊 -->
    <div class="stats-section">
   <div>總洗方塊次數：<span id="totalDraw">0</span></div>
+  <div id="totalCost">總花費金額：0 元</div>
   
   <ul style="margin: 0; padding-left: 1.2em; font-size: 0.95em;">
     <div>
@@ -221,34 +222,11 @@
   </div>
 
   <!-- ✅ 載入 JS（順序不能錯） -->
-  <script src="potential2_data.js"></script>
-  <script src="potential2_cube.js"></script>
+  <script src="potential_dataV3.js"></script>
+  <script src="potential_cubeV3.js"></script>
+  <script src="potential_statsV3.js"></script>
 
-  <!-- ✅ 初始化目標選單 -->
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const allOptions = [
-        ...potentialData_special,
-        ...potentialData_rare,
-        ...potentialData_epic,
-        ...potentialData_legendary
-      ];
-      const selects = [
-        document.getElementById("target1"),
-        document.getElementById("target2"),
-        document.getElementById("target3")
-      ];
-      for (let select of selects) {
-        for (let opt of allOptions) {
-          const option = document.createElement("option");
-          option.value = opt.name;
-          option.textContent = opt.name;
-          select.appendChild(option);
-        }
-      }
-    });
-  </script>
-  
+
 </body>
 </html>
 
