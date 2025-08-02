@@ -142,7 +142,8 @@ document.getElementById("legendaryDrawCount").textContent = `傳說階級總洗�
     for (const val of atkValues) {
       const key = `${stat}${row}_${val}`;
       const count = potentialStatsCount[key];
-      const pct = totalDraws > 0 ? ((count / totalDraws) * 100).toFixed(2) : "0.00";
+      const pct = legendaryDrawCount > 0 ? ((count / legendaryDrawCount) * 100).toFixed(2) : "0.00";
+
 
       let idPrefix = "";
       if (stat === "攻擊力") {
@@ -358,6 +359,17 @@ document.getElementById("legendaryDrawCount").textContent = "傳說階級總洗�
   `;
   document.getElementById("startTierSelect").value = "特殊";
   updateUpgradeButtonStatus();
+  // ✅ 清空傳說潛能詳細統計
+for (let i = 1; i <= 3; i++) {
+  legendaryLineStats[i] = {}; // 清空統計資料
+  const container = document.getElementById(`legendaryStat${i}`);
+  if (container) container.textContent = "（尚未出現任何潛能）";
+}
+
+// ✅ 同時關閉詳細統計區塊（如果已展開）
+const detail = document.getElementById("legendaryStatDetail");
+if (detail) detail.style.display = "none";
+
 }
 
 function forceStop() {
