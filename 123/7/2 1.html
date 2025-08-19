@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>RPG 自動戰鬥首頁</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0c0c1c;
+      color: #fff;
+      font-family: "Microsoft JhengHei", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px;
+      zoom: 1.5;
+      font-size: 11px;
+    }
+    .hp-bar-wrapper {
+      margin: 6px 0;
+    }
+    .hp-bar-bg {
+      background-color: #444;
+      border: 1px solid #222;
+      width: 100%;
+      height: 18px;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .hp-bar-fill {
+      background-color: #e53935;
+      height: 100%;
+      width: 100%;
+      transition: width 0.4s ease;
+    }
+    .hp-bar-text {
+      font-size: 12px;
+      margin-top: 4px;
+      color: #fff;
+      text-align: center;
+    }
+    .container {
+      width: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      min-width: 240px;
+      gap: 10px;
+    }
+    .section {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 6px 8px;
+      box-shadow: inset 0 0 4px #111;
+      flex: 1;
+    }
+    .section h2 {
+      margin: 0 0 4px 0;
+      font-size: 12px;
+      border-bottom: 1px solid #555;
+      padding-bottom: 2px;
+    }
+    .section span {
+      display: block;
+      margin: 2px 0;
+    }
+    #battleLog {
+      margin-top: 5px;
+      background: #111;
+      padding: 6px;
+      border-radius: 4px;
+      max-height: 160px;
+      overflow-y: auto;
+      font-size: 11px;
+    }
+    #equipModal, #skillModal {
+      display: none;
+      position: fixed;
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #222;
+      padding: 12px;
+      border: 1px solid #888;
+      border-radius: 6px;
+      z-index: 1000;
+      width: 90vw;
+      max-width: 200px;
+      max-height: 70vh;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    #skillModal h3 {
+      margin-top: 0;
+      font-size: 13px;
+      border-bottom: 1px solid #666;
+      padding-bottom: 4px;
+    }
+    #skillList {
+      max-height: 50vh;
+      overflow-y: auto;
+      padding-right: 4px;
+      box-sizing: border-box;
+    }
+    #modalBackdrop, #skillBackdrop {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+    }
+    /* 🏆 新增：模態視窗樣式 */
+    .setup-modal {
+      display: none;
+      position: fixed;
+      z-index: 10000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.8);
+      justify-content: center;
+      align-items: center;
+    }
+    .setup-modal-content {
+      background-color: #1a1a2e;
+      color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      width: 80%;
+      max-width: 300px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+    .setup-modal-content h2 {
+      margin-top: 0;
+      font-size: 1.5em;
+      border-bottom: 2px solid #5c628e;
+      padding-bottom: 10px;
+    }
+    .setup-modal-content input, .setup-modal-content select, .setup-modal-content button {
+      width: calc(100% - 20px);
+      padding: 8px;
+      margin-top: 10px;
+      border-radius: 4px;
+      border: 1px solid #5c628e;
+      background-color: #2e2e4e;
+      color: #fff;
+    }
+    .setup-modal-content button {
+      cursor: pointer;
+      background-color: #4a4a8a;
+    }
+    .setup-modal-content button:hover {
+      background-color: #6a6ad0;
+    }
+  </style>
+</head>
+<body>
+  
+  <div id="gameSetupModal" class="setup-modal">
+    <div class="setup-modal-content">
+      <h2>設定角色</h2>
+      <div>
+        <label for="nicknameInput">暱稱：</label>
+        <input type="text" id="nicknameInput" placeholder="輸入你的暱稱">
+      </div>
+      <div>
+        <label for="jobSelect">職業：</label>
+        <select id="jobSelect">
+          <option value="warrior">戰士</option>
+          <option value="mage">法師</option>
+          <option value="archer">弓箭手</option>
+          <option value="thief">盜賊</option>
+        </select>
+      </div>
+      <button onclick="startGame()">開始遊戲</button>
+    </div>
+  </div>
+
+<!-- 只貼 <body> 內主要區塊，樣式沿用你現有的；把這段替換你原本的對應區塊即可 -->
+
+<div class="container">
+  <div class="row">
+    <div class="section">
+      <h2>角色資訊</h2>
+      <div>
+        暱稱：<span id="player-nickname"></span><br>
+        職業：<span id="player-job"></span>
+      </div>
+      <hr style="border: 1px solid #444; margin: 6px 0;">
+      <div>
+        等級：<span id="player-level">1</span><br>
+        經驗值：<span id="player-exp">0 / 100</span><br>
+        <progress id="exp-bar" value="0" max="100" style="width: 100%; height: 1.5em;"></progress>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>資源</h2>
+      <span>楓幣：<strong id="gold">0</strong></span>
+      <span>鑽石：<strong id="gem">0</strong></span>
+      <span>強化石：<strong id="stone">0</strong></span>
+      <div style="margin-top:6px;">
+        <button onclick="openInventoryModal()">🎒 背包</button>
+        <button onclick="openShopModal()">商店</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 中間：屬性點數（新增幸運） -->
+  <div class="row">
+    <div class="section" style="width:100%;">
+      <h2>屬性點數</h2>
+      <div style="margin-top:6px;">
+        <strong>可分配點數</strong>：<span id="stat-points-display">0</span>
+      </div>
+      <div style="margin-top:8px;">
+    </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+        <div style="flex:1;min-width:140px;display:flex;justify-content:space-between;align-items:center;">
+          <span>力量：<span id="str-display">10</span></span>
+          <button class="stat-button" onclick="allocateStat('str')" style="font-size:10px;padding:2px 6px;">＋</button>
+        </div>
+        <div style="flex:1;min-width:140px;display:flex;justify-content:space-between;align-items:center;">
+          <span>敏捷：<span id="agi-display">10</span></span>
+          <button class="stat-button" onclick="allocateStat('agi')" style="font-size:10px;padding:2px 6px;">＋</button>
+        </div>
+        <div style="flex:1;min-width:140px;display:flex;justify-content:space-between;align-items:center;">
+          <span>智力：<span id="int-display">10</span></span>
+          <button class="stat-button" onclick="allocateStat('int')" style="font-size:10px;padding:2px 6px;">＋</button>
+        </div>
+        <!-- 🆕 幸運 -->
+        <div style="flex:1;min-width:140px;display:flex;justify-content:space-between;align-items:center;">
+          <span>幸運：<span id="luk-display">10</span></span>
+          <button class="stat-button" onclick="allocateStat('luk')" style="font-size:10px;padding:2px 6px;">＋</button>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-top:10px;">
+        <button class="stat-button" onclick="openStatModal()">詳細數值</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- 能力值：上半部固定顯示，下半部可收合 -->
+    <div class="section">
+      <h2>能力值</h2>
+      <!-- 固定顯示（不受收合影響） -->
+      <span>血量：<strong id="hp">100 / 100</strong></span>
+      <span>護盾值：<strong id="shield">0</strong></span>
+      <span>魔力：<strong id="mp">0 / 0</strong></span>
+<!-- 法師專用：魔力護盾（非法師會自動隱藏） -->
+<div id="manaShieldRow" style="display:none;">
+  <span>魔力護盾：<strong id="manaShieldPct">0%</strong></span>
+  <button id="manaShieldBtn" onclick="toggleMagicShield()">🛡️ 魔力護盾：關</button>
+</div>
+
+      <!-- 進階能力（預設展開） -->
+      <div id="extra-stats" style="margin-top:6px;">
+        <span>攻擊力：<strong id="atk">10</strong></span>
+       
+        <span>防禦力：<strong id="def">5</strong></span>
+        
+<span>技能傷害：<strong id="skillDamage">0%</strong></span>
+        <!-- 🆕 幸運數值（總和，可選顯示） -->
+<span id="magicShieldRow" style="display:none;">
+  魔力護盾：<strong id="magicShieldPct">0%</strong>
+</span>
+        <span>回復：<strong id="recover">0%</strong></span>
+        <span>閃避：<strong id="dodge">0%</strong></span>
+        <span>爆擊率：<strong id="critRate">0%</strong></span>
+        <span>爆擊傷害：<strong id="critMultiplier">0%</strong></span>
+        <!-- 已移除：攻擊速度、連擊率 -->
+        <span>減傷率：<strong id="damageReduce">0%</strong></span>
+        <div>
+  經驗值: <span id="expRate">0.0%</span>
+</div>
+<div>
+  掉寶率: <span id="dropRate">0.0%</span>
+</div>
+<div>
+  楓幣掉落率: <span id="goldRate">0.0%</span>
+</div>
+
+      </div>
+    </div>
+
+    <div class="section" id="side-slot">
+      <h2>（預留區塊）</h2>
+      <button onclick="window.openSkillModal()">📘 技能清單</button>
+      <button onclick="openEquipmentModal()">⚔️ 裝備強化系統</button>
+      <button onclick="openCoreEnhancePanel()">🧪 核心強化系統</button>
+      <button onclick="openElementEquipmentPanel()">✨ 元素裝備</button>
+      <button onclick="openModulePanel()">恢復系統</button>
+<button onclick="upgradeClover()">升級幸運草</button>
+  </div>
+</div>
+
+<script>
+  // 收合切換
+  function toggleExtraStats() {
+    const box = document.getElementById('extra-stats');
+    const btn = document.getElementById('toggle-extra-stats');
+    if (!box || !btn) return;
+    const isShown = box.style.display !== 'none';
+    box.style.display = isShown ? 'none' : '';
+    btn.textContent = isShown ? '展開進階能力' : '收合進階能力';
+  }
+</script>
+
+  <div id="skillBackdrop"></div>
+  <div id="skillModal">
+    <h3>技能清單</h3>
+    <div id="skillList"></div>
+    <button onclick="closeSkillModal()">關閉</button>
+  </div>
+  <div class="card skill-status-card">
+
+  </div>
+
+  <div class="section" style="width: 100%;">
+    <h2>戰鬥設定</h2>
+
+<div id="monsters-box"></div>
+        <br>
+    <label for="mapSelect">選擇地圖：</label>
+    <select id="mapSelect"></select>
+    <br>
+    <label for="levelRange">選擇怪物等級範圍：</label>
+    <div style="display: flex; align-items: center; gap: 0.5em; flex-wrap: wrap;">
+      <select id="levelRange"></select>
+      <span id="minLevelNotice" style="color: #ffd700; font-size: 0.9em;"></span>
+    </div>
+  </div>
+  <div class="section" style="width: 100%;">
+    <h2>怪物資訊</h2>
+    <div id="monsterInfo">尚未遭遇怪物</div>
+  </div>
+
+  <div class="section" style="width: 100%;">
+    <h2>自動戰鬥系統</h2>
+    <div id="battleLog">戰鬥日誌載入中...</div>
+  </div>
+<body>
+<body>
+
+
+    <script src="manage/manifest.js"></script>
+      <script src="manage/loader.js"></script
+</body>
+
+</body>
+
+
