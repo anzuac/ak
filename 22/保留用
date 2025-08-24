@@ -1,0 +1,18 @@
+<div class="section" style="width: 100%;">
+  <h2>戰鬥設定</h2>
+  <button id="btnStart">開始戰鬥</button>
+  <button id="btnStop">停止戰鬥</button>
+  
+  <!-- ▼ 新增：掉落預覽開關（緊貼停止戰鬥） -->
+  <label style="margin-left:8px; user-select:none;">
+    <input type="checkbox" id="dropPreviewToggle" style="vertical-align:middle;">
+    <span style="vertical-align:middle;">顯示掉落預覽</span>
+  </label>
+  <!-- ▲ 新增 -->
+  
+  <span id="diffQueuedBadge" style="display:none;margin-left:.5rem;"></span>
+  <div id="monsters-box"></div>
+  <br>
+  <label for="mapSelect">選擇地圖：</label>
+  <select id="mapSelect"></select>
+</div>
