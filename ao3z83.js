@@ -1,70 +1,67 @@
- // 美髮道具數據（包括男性和女性的道具數據）
-    const hairItems = [
-  // 🔹 男性資料（如前已更新）
-// 🔹 男性資料（修正後：SSS / SS / S / B / C）
-{ name: "黑色雅皮髮型",     type: "SSS", chance: 1.00,  gender: "male" },
-{ name: "黑色萊薩髮型",     type: "SS",  chance: 1.00,  gender: "male" },
-{ name: "黑色純白髮型",     type: "S",   chance: 1.00,  gender: "male" },
+// 美髮道具數據（獨立版本）
+const hairItems = [
+  // 🔹 男性
+  { name: "黑色奪目髮型",         type: "SSS", chance: 1.00,   gender: "male" },
+  { name: "黑色魅力滿點少年髮型", type: "SS",  chance: 1.00,   gender: "male" },
+  { name: "黑色飄逸髮型",         type: "S",   chance: 1.00,   gender: "male" },
 
-{ name: "黑色嬰兒捲造型",   type: "B",   chance: 6.00,  gender: "male" },
-{ name: "黑色潤澤耀眼造型", type: "B",   chance: 6.00,  gender: "male" },
-{ name: "黑色飛翹年輕造型", type: "B",   chance: 6.00,  gender: "male" },
-{ name: "黑色音樂家造型",   type: "B",   chance: 6.00,  gender: "male" },
-{ name: "黑色藍迪造型",     type: "B",   chance: 6.00,  gender: "male" },
+  { name: "黑色塔樓王子造型",     type: "B",   chance: 6.00,   gender: "male" },
+  { name: "黑色拿鐵泡泡髮型",     type: "B",   chance: 6.00,   gender: "male" },
+  { name: "黑色中性別緻造型",     type: "B",   chance: 6.00,   gender: "male" },
+  { name: "黑色撒嬌綁法髮型",     type: "B",   chance: 6.00,   gender: "male" },
+  { name: "黑色超短髮型",         type: "B",   chance: 6.00,   gender: "male" },
 
-{ name: "黑色瀏海飛揚造型", type: "C",   chance: 16.75, gender: "male" },
-{ name: "黑色隨興自捲造型", type: "C",   chance: 16.75, gender: "male" },
-{ name: "黑色蘋果小紮造型", type: "C",   chance: 16.75, gender: "male" },
-{ name: "黑色狂野奔放造型", type: "C",   chance: 16.75, gender: "male" },
+  { name: "黑色剉冰造型",         type: "C",   chance: 16.75,  gender: "male" },
+  { name: "黑色米洛提造型",       type: "C",   chance: 16.75,  gender: "male" },
+  { name: "黑色個性大紮造型",     type: "C",   chance: 16.75,  gender: "male" },
+  { name: "黑色貝瑞斯塔造型",     type: "C",   chance: 16.75,  gender: "male" },
 
-// 🔸 女性資料（更新後）
-{ name: "黑色優雅女子髮型",   type: "SSS", chance: 1.00,  gender: "female" },
-{ name: "黑色妖精的眼淚髮型", type: "SS",  chance: 1.00,  gender: "female" },
-{ name: "黑色艾拉髮型",       type: "S",   chance: 1.00,  gender: "female" },
+  // 🔸 女性
+  { name: "黑色高貴小可愛髮型",   type: "SSS", chance: 1.00,   gender: "female" },
+  { name: "黑色單邊綁髮造型",     type: "SS",  chance: 1.00,   gender: "female" },
+  { name: "黑色性感滿點少女髮型", type: "S",   chance: 1.00,   gender: "female" },
 
-{ name: "黑色愛情暗示造型",   type: "B",   chance: 6.00,  gender: "female" },
-{ name: "黑色消音造型",       type: "B",   chance: 6.00,  gender: "female" },
-{ name: "黑色貴賓狗",         type: "B",   chance: 6.00,  gender: "female" },
-{ name: "黑色可愛風格頭",     type: "B",   chance: 6.00,  gender: "female" },
-{ name: "黑色短劉海髮",       type: "B",   chance: 6.00,  gender: "female" },
+  { name: "黑色蓬鬆束髮造型",     type: "B",   chance: 6.00,   gender: "female" },
+  { name: "黑色小櫻造型",         type: "B",   chance: 6.00,   gender: "female" },
+  { name: "黑色甜蜜馬尾造型",     type: "B",   chance: 6.00,   gender: "female" },
+  { name: "黑色側綁造型",         type: "B",   chance: 6.00,   gender: "female" },
+  { name: "黑色公主髮型",         type: "B",   chance: 6.00,   gender: "female" },
 
-{ name: "黑色蝴蝶側尾造型",   type: "C",   chance: 16.75, gender: "female" },
-{ name: "黑色小啾紮髮造型",   type: "C",   chance: 16.75, gender: "female" },
-{ name: "黑色小捲髮結造型",   type: "C",   chance: 16.75, gender: "female" },
-{ name: "黑色包脖長髮造型",   type: "C",   chance: 16.75, gender: "female" }
+  { name: "黑色含苞待放造型",     type: "C",   chance: 16.75,  gender: "female" },
+  { name: "黑色便條造型",         type: "C",   chance: 16.75,  gender: "female" },
+  { name: "黑色隨風飄逸造型",     type: "C",   chance: 16.75,  gender: "female" },
+  { name: "黑色西洋栗造型",       type: "C",   chance: 16.75,  gender: "female" },
 ];
 
-    // 整形道具數據
-    const surgeryItems = [
-  // 🔹 男性整形（更新後）
- // 🔹 男性臉型（更新後）
-{ name: "鈕扣眼臉型(黑色瞳)",         type: "SSS", chance: 2.50, gender: "male" },
-{ name: "充滿魅力的撩人臉型(黑色瞳)", type: "SS",  chance: 2.50, gender: "male" },
+// 整形道具數據（獨立版本）
+const surgeryItems = [
+  // 🔹 男性
+  { name: "自大基因臉型 (黑色曈)",       type: "SSS", chance: 2.50, gender: "male" },
+  { name: "比較堅決的臉型(黑色眼)",       type: "SS",  chance: 2.50, gender: "male" },
 
-{ name: "化妝國王臉型",     type: "B", chance: 9.50, gender: "male" },
-{ name: "黑色塗鴉造型眼睛", type: "B", chance: 9.50, gender: "male" },
-{ name: "真男人臉型",       type: "B", chance: 9.50, gender: "male" },
-{ name: "黑色惡魔殺手臉型", type: "B", chance: 9.50, gender: "male" },
-{ name: "黑色高傲精靈臉型", type: "B", chance: 9.50, gender: "male" },
-{ name: "黑色杰伊臉形",     type: "B", chance: 9.50, gender: "male" },
-{ name: "黑色不高興的臉",   type: "B", chance: 9.50, gender: "male" },
-{ name: "黑色真實的臉",     type: "B", chance: 9.50, gender: "male" },
-{ name: "黑色厭煩的臉型",   type: "B", chance: 9.50, gender: "male" },
-{ name: "黑色陰沉的臉型",   type: "B", chance: 9.50, gender: "male" },
+  { name: "甜甜愛心臉型",                 type: "B",   chance: 9.50, gender: "male" },
+  { name: "可愛臉型",                     type: "B",   chance: 9.50, gender: "male" },
+  { name: "黑色燦爛的臉",                 type: "B",   chance: 9.50, gender: "male" },
+  { name: "黑色眼睛隨便少年臉型",         type: "B",   chance: 9.50, gender: "male" },
+  { name: "黑色倫多臉型",                 type: "B",   chance: 9.50, gender: "male" },
+  { name: "黑色閃耀的臉型",               type: "B",   chance: 9.50, gender: "male" },
+  { name: "黑色關懷的臉型",               type: "B",   chance: 9.50, gender: "male" },
+  { name: "黑色朋友整型",                 type: "B",   chance: 9.50, gender: "male" },
+  { name: "覺醒者臉型",                   type: "B",   chance: 9.50, gender: "male" },
+  { name: "黑色堅決的臉型",               type: "B",   chance: 9.50, gender: "male" },
 
-  // 🔸 女性整形（原資料保留，若要更新請提供）
-  // 🔸 女性臉型（更新後）
-{ name: "鈕扣眼臉型(黑色瞳)",         type: "SSS", chance: 2.50, gender: "female" },
-{ name: "充滿魅力的撩人臉型(黑色瞳)", type: "SS",  chance: 2.50, gender: "female" },
+  // 🔸 女性
+  { name: "自大基因臉型 (黑色曈)",       type: "SSS", chance: 2.50, gender: "female" },
+  { name: "比較堅決的臉型(黑色眼)",       type: "SS",  chance: 2.50, gender: "female" },
 
-{ name: "化妝皇后臉型",     type: "B", chance: 9.50, gender: "female" },
-{ name: "黑色塗鴉造型眼睛", type: "B", chance: 9.50, gender: "female" },
-{ name: "狡猾臉型",         type: "B", chance: 9.50, gender: "female" },
-{ name: "黑色高傲精靈臉型", type: "B", chance: 9.50, gender: "female" },
-{ name: "黑色親切精靈臉型", type: "B", chance: 9.50, gender: "female" },
-{ name: "黑色厭煩的臉型",   type: "B", chance: 9.50, gender: "female" },
-{ name: "黑色甜蜜的臉型",   type: "B", chance: 9.50, gender: "female" },
-{ name: "黑色女孩娃娃臉造型", type: "B", chance: 9.50, gender: "female" },
-{ name: "黑色放大眼臉型",   type: "B", chance: 9.50, gender: "female" },
-{ name: "黑色俏魔女造型",   type: "B", chance: 9.50, gender: "female" }
-];  
+  { name: "可愛臉型",                     type: "B",   chance: 9.50, gender: "female" },
+  { name: "甜甜愛心臉型",                 type: "B",   chance: 9.50, gender: "female" },
+  { name: "黑色眼睛隨便少女臉型",         type: "B",   chance: 9.50, gender: "female" },
+  { name: "黑色廚師臉",                   type: "B",   chance: 9.50, gender: "female" },
+  { name: "黑色夢布朗臉型",               type: "B",   chance: 9.50, gender: "female" },
+  { name: "黑色布丁臉型",                 type: "B",   chance: 9.50, gender: "female" },
+  { name: "黑色秀臉型",                   type: "B",   chance: 9.50, gender: "female" },
+  { name: "黑色派伊臉型",                 type: "B",   chance: 9.50, gender: "female" },
+  { name: "覺醒者臉型",                   type: "B",   chance: 9.50, gender: "female" },
+  { name: "黑色可愛天使臉型",             type: "B",   chance: 9.50, gender: "female" },
+];
