@@ -15,7 +15,8 @@ export const ratesConfig = {
   // PU 設定：在 SS 3% 中切出 2 個各 0.75%
   pu: {
     enabled: true,
-    sharePercent: 0.75, // 每隻 PU 的百分比
+    sharePercent: 25, // 每隻 PU 的百分比
     units: ["PU001"] // PU 角色 id
   }
+
 };
