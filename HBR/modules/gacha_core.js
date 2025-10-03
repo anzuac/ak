@@ -1,54 +1,79 @@
-// gacha_core.js
+// gacha_core.js － 穩健版（避免回傳 undefined）
 import { units } from "./units.js";
 import { ratesConfig } from "./rates.js";
 
-// 工具：隨機取整數
-function randInt(max) {
-  return Math.floor(Math.random() * max);
-}
+function randInt(max) { return Math.floor(Math.random() * max); }
+function sample(arr) { return arr && arr.length ? arr[randInt(arr.length)] : null; }
 
-// 工具：依表決定稀有度
 function rollRarity(table) {
   const r = Math.random() * 100;
-  let sum = 0;
+  let acc = 0;
   for (const key of Object.keys(table)) {
-    sum += table[key];
-    if (r < sum) return key;
+    acc += Number(table[key] || 0);
+    if (r < acc) return key;
   }
-  return "A"; // fallback
+  return "A"; // 萬一表格總和不是 100，回退 A
 }
 
-// 單抽
-export function drawOne(mode = "general") {
+function poolOf(rarity) {
+  return units.filter(u => u.rarity === rarity);
+}
+
+function safePickFrom(pool, fallbacks = []) {
+  // 依序從 pool → fallback pools → 全角色池 擇一
+  if (pool && pool.length) return sample(pool);
+  for (const fb of fallbacks) {
+    if (fb && fb.length) return sample(fb);
+  }
+  return sample(units); // 最後保底
+}
+
+function drawOne(mode = "general") {
   const table = ratesConfig.tables[mode] || ratesConfig.tables.general;
   const rarity = rollRarity(table);
 
-  // PU 特殊處理 (僅在 SS 時)
-  if (rarity === "SS" && ratesConfig.pu.enabled) {
-    const roll = Math.random() * 100;
-    const totalPU = ratesConfig.pu.units.length * ratesConfig.pu.sharePercent;
-
-    if (roll < ratesConfig.pu.sharePercent) {
-      return units.find(u => u.id === ratesConfig.pu.units[0]);
-    } else if (roll < ratesConfig.pu.sharePercent * 2) {
-      return units.find(u => u.id === ratesConfig.pu.units[1]);
-    } else {
-      const nonPU = units.filter(
-        u => u.rarity === "SS" && !ratesConfig.pu.units.includes(u.id)
-      );
-      return nonPU[randInt(nonPU.length)];
-    }
+  // 非 SS：等分抽取；若該稀有度空，往下回退
+  if (rarity !== "SS" || !ratesConfig.pu?.enabled) {
+    const a = poolOf("A");
+    const s = poolOf("S");
+    const ss = poolOf("SS");
+    if (rarity === "A") return safePickFrom(a, [s, ss]);
+    if (rarity === "S") return safePickFrom(s, [a, ss]);
+    return safePickFrom(ss, [s, a]);
   }
 
-  // 非 PU 或其他稀有度 → 等分
-  const pool = units.filter(u => u.rarity === rarity);
-  return pool[randInt(pool.length)];
+  // === SS + 啟用 PU 的情況 ===
+  const ssPool = poolOf("SS");
+  if (!ssPool.length) return safePickFrom(poolOf("S"), [poolOf("A")]);
+
+  const puIds = ratesConfig.pu.units || [];
+  const puPool = ssPool.filter(u => puIds.includes(u.id));
+  const nonPuPool = ssPool.filter(u => !puIds.includes(u.id));
+
+  // 在 SS 內的 PU 佔比（％），例如 25 = SS 裡 25% 機率是 PU
+  const share = Number(ratesConfig.pu.shareInSS ?? 0);
+  const hitPU = Math.random() * 100 < share;
+
+  if (hitPU) {
+    // PU 區空 → 退回 SS 全池
+    return safePickFrom(puPool, [ssPool, poolOf("S"), poolOf("A")]);
+  } else {
+    // 非 PU 區空 → 退回 PU 區
+    return safePickFrom(nonPuPool, [puPool, ssPool, poolOf("S"), poolOf("A")]);
+  }
 }
 
-// 十連抽
-export function drawTen() {
-  const results = [];
-  for (let i = 0; i < 9; i++) results.push(drawOne("general"));
-  results.push(drawOne("tenGuarantee"));
-  return results;
+function drawTen() {
+  const r = [];
+  // 9 抽一般 + 1 抽保底表
+  for (let i = 0; i < 9; i++) r.push(drawOne("general"));
+  r.push(drawOne("tenGuarantee"));
+
+  // 清掉任何異常空值，補到 10 張
+  let cleaned = r.filter(Boolean);
+  while (cleaned.length < 10) cleaned.push(drawOne("general"));
+  if (cleaned.length > 10) cleaned = cleaned.slice(0, 10);
+  return cleaned;
 }
+
+export { drawOne, drawTen };

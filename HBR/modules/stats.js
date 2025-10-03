@@ -1,8 +1,8 @@
-// stats.js
+// stats.js － 交易式渲染 + 排隊 + 冷卻 + 圖片安全 fallback
 import { drawOne, drawTen } from "./gacha_core.js";
 import { ratesConfig } from "./rates.js";
 
-// ====== 現有統計 ======
+// ====== 統計 ======
 const stats = {
   totalDraws: 0,
   quartzSpent: 0,
@@ -28,181 +28,154 @@ const rateAEl = document.getElementById("rateA");
 const rateSEl = document.getElementById("rateS");
 const rateSSEl = document.getElementById("rateSS");
 const puHitsEl = document.getElementById("puHits");
+const batchInfo = document.getElementById("batchInfo");
 
-// ====== 反吃卡：排隊 + 鎖 + 冷卻 ======
-let queue = [];          // { type: 'single' | 'ten' }
+// ====== 排隊 + 冷卻（不丟單） ======
+let queue = [];
 let running = false;
-let lastClickAt = 0;
-const CLICK_COOLDOWN_MS = 200; // 最短冷卻（避免雙擊/誤觸）
+const COOLDOWN_MS = 180;
 
-function setBusy(isBusy) {
-  btnSingle.disabled = isBusy;
-  btnTen.disabled = isBusy;
-  document.querySelector(".results")?.setAttribute("aria-busy", isBusy ? "true" : "false");
+function setBusy(b) {
+  btnSingle.disabled = b;
+  btnTen.disabled = b;
+  document.querySelector(".results")?.setAttribute("aria-busy", b ? "true" : "false");
 }
-
-function enqueue(type) {
-  const now = Date.now();
-  if (now - lastClickAt < CLICK_COOLDOWN_MS) return; // 冷卻期內忽略額外點擊
-  lastClickAt = now;
-
-  queue.push({ type });
-  if (!running) processQueue();
-}
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function enqueue(type){ queue.push({ type }); if (!running) processQueue(); }
 
 async function processQueue() {
-  running = true;
-  setBusy(true);
+  running = true; setBusy(true);
   try {
     while (queue.length) {
       const job = queue.shift();
-      if (job.type === "single") {
-        await handleSingle();
-      } else if (job.type === "ten") {
-        await handleTen();
+      try {
+        if (job.type === "single") await doSingleTx();
+        else if (job.type === "ten") await doTenTx();
+      } catch (e) {
+        console.error("[draw error]", e);
+        renderErrorCard(String(e?.message || e || "抽卡失敗"));
       }
-      // 讓 UI 有喘息，避免阻塞（也讓快速連點依序完成）
-      await microDelay(16);
+      await sleep(COOLDOWN_MS);
     }
   } finally {
-    setBusy(false);
-    running = false;
+    setBusy(false); running = false;
   }
 }
 
-function microDelay(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+// ====== 圖片 fallback（1x1 透明 PNG，onerror 只跑一次） ======
+const FALLBACK_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMBCF3w9uEAAAAASUVORK5CYII=";
 
-// ====== 建卡片 ======
 function createCard(unit, isNew, isPU) {
   const card = document.createElement("article");
-  card.className = `card rarity-${unit.rarity}`;
+  card.className = `card rarity-${unit?.rarity || "A"}`;
 
   const imgBox = document.createElement("div");
   imgBox.className = "card-img";
 
   const img = document.createElement("img");
-  img.src = `assets/images/units/${unit.img}`;
-  img.alt = unit.name;
+  img.src = `assets/images/units/${unit?.img || ""}`;
+  img.alt = unit?.name || "unknown";
   img.loading = "lazy";
-  // 圖片載入失敗 fallback（避免破圖）
-  img.onerror = () => { img.src = "assets/images/units/_fallback.png"; };
+  img.onerror = function onErrOnce() {
+    this.onerror = null;
+    this.src = FALLBACK_DATA_URL;
+  };
   imgBox.appendChild(img);
 
-  const tags = document.createElement("div");
-  tags.className = "tags";
-  if (isNew) {
-    const newTag = document.createElement("span");
-    newTag.className = "tag new";
-    newTag.textContent = "NEW";
-    tags.appendChild(newTag);
-  }
-  if (isPU) {
-    const puTag = document.createElement("span");
-    puTag.className = "tag pu";
-    puTag.textContent = "PU";
-    tags.appendChild(puTag);
-  }
+  const tags = document.createElement("div"); tags.className = "tags";
+  if (isNew) { const t=document.createElement("span"); t.className="tag new"; t.textContent="NEW"; tags.appendChild(t); }
+  if (isPU)  { const t=document.createElement("span"); t.className="tag pu";  t.textContent="PU";  tags.appendChild(t); }
   imgBox.appendChild(tags);
 
-  const info = document.createElement("div");
-  info.className = "card-info";
-
-  const name = document.createElement("p");
-  name.className = "name";
-  name.textContent = unit.name;
+  const info = document.createElement("div"); info.className = "card-info";
+  const name = document.createElement("p"); name.className = "name"; name.textContent = unit?.name || "(未知)";
   info.appendChild(name);
 
-  card.appendChild(imgBox);
-  card.appendChild(info);
-
+  card.appendChild(imgBox); card.appendChild(info);
   return card;
 }
 
+function renderErrorCard(msg){
+  grid.innerHTML = "";
+  const card = document.createElement("article");
+  card.className = "card rarity-A";
+  card.innerHTML = `<div class="card-info"><p class="name">⚠ 抽卡顯示失敗</p><p class="subtitle">${msg}</p></div>`;
+  grid.appendChild(card);
+}
+
 // ====== 統計 ======
-function updateStats(rarity, isPU) {
+function applyStats(unit) {
   stats.totalDraws++;
   stats.quartzSpent += ratesConfig.drawCost;
 
-  if (rarity === "A") stats.countA++;
-  else if (rarity === "S") stats.countS++;
-  else if (rarity === "SS") stats.countSS++;
+  if (unit.rarity === "A") stats.countA++;
+  else if (unit.rarity === "S") stats.countS++;
+  else if (unit.rarity === "SS") stats.countSS++;
 
+  const isPU = (ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id)) || false;
   if (isPU) stats.puHits++;
-
-  const rateA = stats.totalDraws ? (stats.countA / stats.totalDraws * 100).toFixed(2) : "0.00";
-  const rateS = stats.totalDraws ? (stats.countS / stats.totalDraws * 100).toFixed(2) : "0.00";
-  const rateSS = stats.totalDraws ? (stats.countSS / stats.totalDraws * 100).toFixed(2) : "0.00";
 
   totalDrawsEl.textContent = stats.totalDraws;
   quartzSpentEl.textContent = stats.quartzSpent;
   countAEl.textContent = stats.countA;
   countSEl.textContent = stats.countS;
   countSSEl.textContent = stats.countSS;
-  rateAEl.textContent = `${rateA}%`;
-  rateSEl.textContent = `${rateS}%`;
-  rateSSEl.textContent = `${rateSS}%`;
+
+  const ra = stats.totalDraws ? (stats.countA / stats.totalDraws * 100).toFixed(2) : "0.00";
+  const rs = stats.totalDraws ? (stats.countS / stats.totalDraws * 100).toFixed(2) : "0.00";
+  const rss= stats.totalDraws ? (stats.countSS/ stats.totalDraws * 100).toFixed(2) : "0.00";
+  rateAEl.textContent = `${ra}%`; rateSEl.textContent = `${rs}%`; rateSSEl.textContent = `${rss}%`;
   puHitsEl.textContent = stats.puHits;
 }
 
 function resetStats() {
-  stats.totalDraws = 0;
-  stats.quartzSpent = 0;
-  stats.countA = 0;
-  stats.countS = 0;
-  stats.countSS = 0;
-  stats.puHits = 0;
-  stats.obtained.clear();
+  stats.totalDraws = 0; stats.quartzSpent = 0;
+  stats.countA = stats.countS = stats.countSS = 0;
+  stats.puHits = 0; stats.obtained.clear();
   grid.innerHTML = "";
-
-  // 清顯示
-  totalDrawsEl.textContent = 0;
-  quartzSpentEl.textContent = 0;
-  countAEl.textContent = 0;
-  countSEl.textContent = 0;
-  countSSEl.textContent = 0;
-  rateAEl.textContent = "0%";
-  rateSEl.textContent = "0%";
-  rateSSEl.textContent = "0%";
+  totalDrawsEl.textContent = 0; quartzSpentEl.textContent = 0;
+  countAEl.textContent = 0; countSEl.textContent = 0; countSSEl.textContent = 0;
+  rateAEl.textContent = "0%"; rateSEl.textContent = "0%"; rateSSEl.textContent = "0%";
   puHitsEl.textContent = 0;
+  if (batchInfo) batchInfo.textContent = "—";
 }
 
-// ====== 抽卡處理（只顯示本次結果：單抽 1 張 / 十連 10 張） ======
-async function handleSingle() {
+// ====== 交易式抽卡 ======
+async function doSingleTx() {
   const unit = drawOne("general");
+  if (!unit) throw new Error("單抽回傳空結果");
   const isNew = !stats.obtained.has(unit.id);
-  const isPU = (ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id)) || false;
+  const isPU  = (ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id)) || false;
   stats.obtained.add(unit.id);
 
   grid.innerHTML = "";
   grid.appendChild(createCard(unit, isNew, isPU));
-
-  updateStats(unit.rarity, isPU);
+  applyStats(unit);
+  if (batchInfo) batchInfo.textContent = "本次：1 抽";
 }
 
-async function handleTen() {
-  const results = drawTen();
+async function doTenTx() {
+  let results = drawTen() || [];
+  results = results.filter(Boolean);
+  while (results.length < 10) results.push(drawOne("general"));
+  if (results.length > 10) results = results.slice(0, 10);
 
-  grid.innerHTML = "";
+  const frag = document.createDocumentFragment();
   for (const unit of results) {
     const isNew = !stats.obtained.has(unit.id);
-    const isPU = (ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id)) || false;
+    const isPU  = (ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id)) || false;
     stats.obtained.add(unit.id);
-
-    grid.appendChild(createCard(unit, isNew, isPU));
-    updateStats(unit.rarity, isPU);
-
-    // 逐張插入時微延遲（可視化連抽感；想更快可調小或移除）
-    await microDelay(8);
+    frag.appendChild(createCard(unit, isNew, isPU));
   }
+  grid.innerHTML = "";
+  grid.appendChild(frag);
+
+  for (const unit of results) applyStats(unit);
+  if (batchInfo) batchInfo.textContent = "本次：10 連";
 }
 
-// ====== 綁定事件（改成入列） ======
+// ====== 事件 ======
 btnSingle.addEventListener("click", () => enqueue("single"));
 btnTen.addEventListener("click", () => enqueue("ten"));
-btnReset.addEventListener("click", () => {
-  // 清空排隊，避免重置後還處理舊任務
-  queue = [];
-  resetStats();
-});
+btnReset.addEventListener("click", () => { queue = []; resetStats(); });

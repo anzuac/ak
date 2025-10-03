@@ -18,5 +18,4 @@ export const ratesConfig = {
     sharePercent: 25, // 每隻 PU 的百分比
     units: ["PU001"] // PU 角色 id
   }
-
 };
