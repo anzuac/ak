@@ -2,7 +2,7 @@
 import { drawOne, drawTen } from "./gacha_core.js";
 import { ratesConfig } from "./rates.js";
 
-// 統計資料
+// ====== 現有統計 ======
 const stats = {
   totalDraws: 0,
   quartzSpent: 0,
@@ -10,16 +10,15 @@ const stats = {
   countS: 0,
   countSS: 0,
   puHits: 0,
-  obtained: new Set() // 用來判斷 NEW
+  obtained: new Set()
 };
 
-// 綁定按鈕
+// ====== DOM ======
 const btnSingle = document.getElementById("btnSingle");
 const btnTen = document.getElementById("btnTen");
 const btnReset = document.getElementById("btnReset");
 const grid = document.getElementById("resultsGrid");
 
-// UI 統計欄位
 const totalDrawsEl = document.getElementById("totalDraws");
 const quartzSpentEl = document.getElementById("quartzSpent");
 const countAEl = document.getElementById("countA");
@@ -30,9 +29,52 @@ const rateSEl = document.getElementById("rateS");
 const rateSSEl = document.getElementById("rateSS");
 const puHitsEl = document.getElementById("puHits");
 
-// ===== 功能 =====
+// ====== 反吃卡：排隊 + 鎖 + 冷卻 ======
+let queue = [];          // { type: 'single' | 'ten' }
+let running = false;
+let lastClickAt = 0;
+const CLICK_COOLDOWN_MS = 200; // 最短冷卻（避免雙擊/誤觸）
 
-// 建立卡片 HTML
+function setBusy(isBusy) {
+  btnSingle.disabled = isBusy;
+  btnTen.disabled = isBusy;
+  document.querySelector(".results")?.setAttribute("aria-busy", isBusy ? "true" : "false");
+}
+
+function enqueue(type) {
+  const now = Date.now();
+  if (now - lastClickAt < CLICK_COOLDOWN_MS) return; // 冷卻期內忽略額外點擊
+  lastClickAt = now;
+
+  queue.push({ type });
+  if (!running) processQueue();
+}
+
+async function processQueue() {
+  running = true;
+  setBusy(true);
+  try {
+    while (queue.length) {
+      const job = queue.shift();
+      if (job.type === "single") {
+        await handleSingle();
+      } else if (job.type === "ten") {
+        await handleTen();
+      }
+      // 讓 UI 有喘息，避免阻塞（也讓快速連點依序完成）
+      await microDelay(16);
+    }
+  } finally {
+    setBusy(false);
+    running = false;
+  }
+}
+
+function microDelay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+// ====== 建卡片 ======
 function createCard(unit, isNew, isPU) {
   const card = document.createElement("article");
   card.className = `card rarity-${unit.rarity}`;
@@ -44,6 +86,8 @@ function createCard(unit, isNew, isPU) {
   img.src = `assets/images/units/${unit.img}`;
   img.alt = unit.name;
   img.loading = "lazy";
+  // 圖片載入失敗 fallback（避免破圖）
+  img.onerror = () => { img.src = "assets/images/units/_fallback.png"; };
   imgBox.appendChild(img);
 
   const tags = document.createElement("div");
@@ -76,22 +120,21 @@ function createCard(unit, isNew, isPU) {
   return card;
 }
 
-// 更新統計
+// ====== 統計 ======
 function updateStats(rarity, isPU) {
   stats.totalDraws++;
   stats.quartzSpent += ratesConfig.drawCost;
 
   if (rarity === "A") stats.countA++;
-  if (rarity === "S") stats.countS++;
-  if (rarity === "SS") stats.countSS++;
+  else if (rarity === "S") stats.countS++;
+  else if (rarity === "SS") stats.countSS++;
+
   if (isPU) stats.puHits++;
 
-  // 計算比例
-  const rateA = (stats.countA / stats.totalDraws * 100).toFixed(2);
-  const rateS = (stats.countS / stats.totalDraws * 100).toFixed(2);
-  const rateSS = (stats.countSS / stats.totalDraws * 100).toFixed(2);
+  const rateA = stats.totalDraws ? (stats.countA / stats.totalDraws * 100).toFixed(2) : "0.00";
+  const rateS = stats.totalDraws ? (stats.countS / stats.totalDraws * 100).toFixed(2) : "0.00";
+  const rateSS = stats.totalDraws ? (stats.countSS / stats.totalDraws * 100).toFixed(2) : "0.00";
 
-  // 更新 UI
   totalDrawsEl.textContent = stats.totalDraws;
   quartzSpentEl.textContent = stats.quartzSpent;
   countAEl.textContent = stats.countA;
@@ -103,7 +146,6 @@ function updateStats(rarity, isPU) {
   puHitsEl.textContent = stats.puHits;
 }
 
-// 重置統計
 function resetStats() {
   stats.totalDraws = 0;
   stats.quartzSpent = 0;
@@ -112,13 +154,9 @@ function resetStats() {
   stats.countSS = 0;
   stats.puHits = 0;
   stats.obtained.clear();
-
   grid.innerHTML = "";
-  updateStatsDisplayOnly();
-}
 
-// 更新顯示（只清數字）
-function updateStatsDisplayOnly() {
+  // 清顯示
   totalDrawsEl.textContent = 0;
   quartzSpentEl.textContent = 0;
   countAEl.textContent = 0;
@@ -130,34 +168,41 @@ function updateStatsDisplayOnly() {
   puHitsEl.textContent = 0;
 }
 
-// ===== 綁定事件 =====
-btnSingle.addEventListener("click", () => {
+// ====== 抽卡處理（只顯示本次結果：單抽 1 張 / 十連 10 張） ======
+async function handleSingle() {
   const unit = drawOne("general");
   const isNew = !stats.obtained.has(unit.id);
-  const isPU = ratesConfig.pu.units.includes(unit.id);
+  const isPU = (ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id)) || false;
   stats.obtained.add(unit.id);
 
-  // 🔄 清空舊結果，只保留這一次的
   grid.innerHTML = "";
   grid.appendChild(createCard(unit, isNew, isPU));
 
   updateStats(unit.rarity, isPU);
-});
+}
 
-btnTen.addEventListener("click", () => {
+async function handleTen() {
   const results = drawTen();
 
-  // 🔄 清空舊結果，只顯示這次的十連
   grid.innerHTML = "";
-
-  results.forEach(unit => {
+  for (const unit of results) {
     const isNew = !stats.obtained.has(unit.id);
-    const isPU = ratesConfig.pu.units.includes(unit.id);
+    const isPU = (ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id)) || false;
     stats.obtained.add(unit.id);
 
     grid.appendChild(createCard(unit, isNew, isPU));
     updateStats(unit.rarity, isPU);
-  });
-});
 
-btnReset.addEventListener("click", resetStats);
+    // 逐張插入時微延遲（可視化連抽感；想更快可調小或移除）
+    await microDelay(8);
+  }
+}
+
+// ====== 綁定事件（改成入列） ======
+btnSingle.addEventListener("click", () => enqueue("single"));
+btnTen.addEventListener("click", () => enqueue("ten"));
+btnReset.addEventListener("click", () => {
+  // 清空排隊，避免重置後還處理舊任務
+  queue = [];
+  resetStats();
+});
