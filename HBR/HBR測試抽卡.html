@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>抽卡模擬器 測試用</title>
+  <meta name="color-scheme" content="dark light" />
+  <style>
+    :root{
+      --bg: #0b0f1a;
+      --bg-soft:#0f1524;
+      --panel:#121a2c;
+      --text:#e6e8ef;
+      --muted:#9aa3b2;
+      --primary:#5cc2ff;
+      --accent:#ffe38f;
+      --danger:#ff5c7a;
+      --ring:#2b8fff33;
+
+      --radius:14px;
+      --shadow:0 8px 18px rgba(0,0,0,.35);
+      --grid-min: 130px;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: system-ui, "Microsoft JhengHei", Segoe UI, Roboto, Apple SD Gothic Neo, sans-serif;
+      background: radial-gradient(1200px 800px at 70% -10%, #182448 0%, var(--bg) 45%) fixed;
+      color:var(--text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+ #puStatsBlock {
+  font-size: 14px;   /* 改大一點，例如 14px 或 16px */
+  font-weight: 600;  /* 讓字體更粗 */
+}
+#puStatsBlock .pill {
+  padding: 8px 12px; /* 調整 pill 大小 */
+}
+
+    .container{max-width: 1200px;margin: 0 auto;padding: 16px clamp(12px, 2.4vw, 24px);}
+
+    /* Header */
+    .top-bar{
+      display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;
+      padding:12px;background:linear-gradient(180deg, #18223c 0%, var(--panel) 100%);
+      border-radius: var(--radius);box-shadow: var(--shadow);position: sticky;top: 0;z-index: 5;
+      border:1px solid #2b385a;
+    }
+    .back-btn{appearance:none;border:0;outline:0;background:#1b2541;color:#d6def1;
+      padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600;
+      box-shadow: inset 0 0 0 1px #2a3a62;}
+    .back-btn:active{transform: translateY(1px)}
+    .title{margin:0;text-align:center;letter-spacing:.4px;font-size: clamp(18px, 2.2vw, 22px);font-weight: 800;}
+    .stats-summary{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted);white-space:nowrap;}
+    .pill{padding:6px 10px;border-radius:999px;background:#1a2442;color:#d9e4ff;border:1px solid #2b3b64;}
+
+    /* Layout */
+    .main{display:grid;grid-template-columns: 1fr;gap:16px;margin-top:16px;}
+    @media (min-width: 980px){.main{grid-template-columns: 320px 1fr;align-items:start;}}
+
+    /* Controls */
+    .panel{background: linear-gradient(180deg, #15203b 0%, var(--panel) 100%);
+      border:1px solid #2c3c66;border-radius: var(--radius);box-shadow: var(--shadow);padding:16px;}
+    .panel h2{margin:0 0 10px;font-size:16px;color:#d7e4ff;letter-spacing:.3px;}
+    .hint{font-size:12px;color:var(--muted);margin-bottom:10px;}
+    .btn{width:100%;appearance:none;border:0;outline:0;border-radius:12px;padding:14px 16px;
+      background: #18365a;color:#e8f2ff;font-weight:800;letter-spacing:.4px;cursor:pointer;
+      box-shadow: 0 8px 18px rgba(20,36,66,.35), inset 0 0 0 1px #295a92;transition: transform .02s ease-in;}
+    .btn + .btn{margin-top:10px}
+    .btn.primary{background: linear-gradient(180deg, #1e78c6 0%, #1552a1 100%);
+      box-shadow: 0 10px 24px #0d4fa366, inset 0 0 0 1px #4aa7ff;}
+    .btn.gold{background: linear-gradient(180deg, #ffd76a 0%, #f0b93f 100%);color:#2a1d00;
+      box-shadow: 0 10px 24px rgba(255, 203, 84, .5), inset 0 0 0 1px #a67617;}
+    .btn.danger{background: linear-gradient(180deg, #ff6b86 0%, #e04864 100%);
+      box-shadow: 0 10px 24px rgba(238, 78, 110,.4), inset 0 0 0 1px #97243a;}
+    .btn:active{transform: translateY(1px)}
+    .legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:#c9d6f2;}
+    .legend .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;box-shadow: 0 0 10px currentColor;}
+
+
+    /* Results */
+    .results{background: linear-gradient(180deg, #15203b 0%, var(--panel) 100%);
+      border:1px solid #2c3c66;border-radius: var(--radius);box-shadow: var(--shadow);padding:16px;}
+    .results-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
+    .results-title{margin:0;font-size:16px;color:#d7e4ff}
+    .grid{display:grid;grid-template-columns: repeat(auto-fit, minmax(var(--grid-min), 1fr));gap:12px;}
+
+    .card{position:relative;overflow:hidden;border-radius: 12px;background:#0f1530;
+      border:1px solid #2b3c66;transition: transform .08s ease, box-shadow .2s ease;}
+    .card-img{aspect-ratio: 16/10;background:#0c1330;display:flex;align-items:center;justify-content:center;position:relative;}
+    .card-img img{width:100%;height:100%;object-fit:cover;display:block;}
+    .tags{position:absolute;top:8px;right:8px;display:flex;gap:6px;}
+    .tag{font-size:11px;font-weight:800;padding:4px 6px;border-radius: 999px;letter-spacing:.3px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.35);border:1px solid #ffffff33;}
+    .tag.new{background: linear-gradient(180deg, #ff6b8b 0%, #e44970 100%);color:#fff}
+    .tag.pu{background: linear-gradient(180deg, #6bd1ff 0%, #3c9de1 100%);color:#061424}
+    .card-info{padding:10px 10px 12px;display:flex;flex-direction:column;gap:4px;}
+    .name{margin:0;font-weight:700;font-size:14px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .subtitle{margin:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+    /* 稀有度框 */
+    .rarity-A{box-shadow: inset 0 0 0 2px #9aa3b2;}
+    .rarity-S{box-shadow: inset 0 0 0 2px #7a5cff, 0 0 20px #7a5cff44;}
+    .rarity-SS{box-shadow: inset 0 0 0 2px #ffd56b, 0 0 28px #ffd56b55;}
+    .rarity-SS .card-img::after{content:"";position:absolute;inset:-20%;
+      background: conic-gradient(from 0deg, #ffd56b22, #ffffff00 30%, #ffd56b22 60%, #ffffff00 100%);
+      animation: spin 6s linear infinite;pointer-events:none;}
+    @keyframes spin{to{transform: rotate(360deg)}}
+
+    /* Stats table */
+    .stats-panel{margin-top:16px;background: linear-gradient(180deg, #15203b 0%, var(--panel) 100%);
+      border:1px solid #2c3c66;border-radius: var(--radius);box-shadow: var(--shadow);padding:16px;}
+    .stats-panel h2{margin:0 0 10px;font-size:16px;color:#d7e4ff}
+    .stats-panel table{width:100%;border-collapse:collapse;color:#d9e4ff;font-size:14px;}
+    .stats-panel th,.stats-panel td{padding:6px;text-align:center;border-bottom:1px solid #2b3c66;}
+    .stats-panel th{color:#aab6d9}
+    .footer{text-align:center;color:var(--muted);font-size:12px;padding:16px 0 40px;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="top-bar">
+      <button class="back-btn" id="btnBack" aria-label="返回">←</button>
+      <h1 class="title">抽卡模擬器</h1>
+      <div class="stats-summary">
+        <span class="pill">抽卡 <b id="totalDraws">0</b></span>
+        <span class="pill">石英 <b id="quartzSpent">0</b></span>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="main">
+      <!-- 操作 -->
+      <section class="panel">
+        <h2>操作</h2>
+        <p class="hint">1 抽 = 300 石英</p>
+        <button class="btn primary" id="btnSingle">單抽</button>
+        <button class="btn gold" id="btnTen">10 連</button>
+        <button class="btn danger" id="btnReset">重置</button>
+        <div class="legend">
+          <span><span class="dot" style="color:#9aa3b2"></span>A</span>
+          <span><span class="dot" style="color:#7a5cff"></span>S</span>
+          <span><span class="dot" style="color:#ffd56b"></span>SS</span>
+        </div>
+      </section>
+
+      <!-- 結果 -->
+      <section class="results">
+        <div class="results-header">
+          <h2 class="results-title">抽卡結果</h2>
+          <div class="pill" id="batchInfo">—</div>
+        </div>
+        <div class="grid" id="resultsGrid"></div>
+      </section>
+    </main>
+
+    <!-- 統計紀錄 -->
+    <section class="stats-panel">
+      <h2>統計紀錄</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>稀有度</th>
+            <th>數量</th>
+            <th>比例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>A</td><td id="countA">0</td><td id="rateA">0%</td></tr>
+          <tr><td>S</td><td id="countS">0</td><td id="rateS">0%</td></tr>
+          <tr><td>SS</td><td id="countSS">0</td><td id="rateSS">0%</td></tr>
+        </tbody>
+      </table>
+     <div class="legend" id="puStatsBlock" style="margin-top:10px"></div>
+  <div class="pill" style="margin-top:10px">
+  歐非值：<b id="luckStatus">樣本不足</b>
+
+</div>
+<div class="pill" style="margin-top:6px">
+  PU 歐非值：<b id="puLuckStatus">樣本不足</b>
+</div>
+
+
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      抽卡模擬器 • 測試版
+    </footer>
+  </div>
+
+  <!-- JS 模組 -->
+  <script type="module" src="./modules2/stats.js"></script>
+</body>
+</html>
