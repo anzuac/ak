@@ -1,10 +1,10 @@
-// stats.js － 抽卡結果統計 + PU 統計 + 歐非值 (SS/PU) + 安全渲染
+// stats.js － 抽卡結果統計 + PU 統計 + 歐非值 (SS/PU) + 歷史紀錄
 import { drawOne, drawTen } from "./gacha_core.js";
 import { ratesConfig } from "./rates.js";
 import { units } from "./units.js";
+import { addHistory, loadHistory, clearHistory } from "./history.js";
 
 /* ---------- 工具：讀取理論機率 ---------- */
-// SS 理論機率（回傳小數，如 3% -> 0.03）
 function getSSRate() {
   const v =
     (ratesConfig.pool && ratesConfig.pool.SS) ??
@@ -14,11 +14,6 @@ function getSSRate() {
   const n = Number(v);
   return Number.isFinite(n) ? n / 100 : 0.03; // 預設 3%
 }
-
-// PU 總理論機率（回傳小數），支援幾種設定方式：
-// 1) ratesConfig.pu.rateTotal ＝ PU 總百分比（例如 1.5）
-// 2) ratesConfig.pu.rateEach ＝ 每隻 PU 百分比（例如 0.75），自動 * PU 數量
-// 3) 若都沒有則為 0
 function getPuTotalRate() {
   const pu = ratesConfig.pu || {};
   if (pu.rateTotal != null) {
@@ -39,8 +34,8 @@ const stats = {
   countA: 0,
   countS: 0,
   countSS: 0,
-  puHits: 0,            // ← 新增：PU 命中總次數
-  puCounts: {},         // 每隻 PU 的命中次數 {id: n}
+  puHits: 0,
+  puCounts: {},
   obtained: new Set()
 };
 
@@ -60,8 +55,10 @@ const rateSEl = document.getElementById("rateS");
 const rateSSEl = document.getElementById("rateSS");
 const batchInfo = document.getElementById("batchInfo");
 const puStatsBlock = document.getElementById("puStatsBlock");
-const luckEl = document.getElementById("luckStatus");     // SS 歐非值
-const puLuckEl = document.getElementById("puLuckStatus"); // PU 歐非值
+const luckEl = document.getElementById("luckStatus");
+const puLuckEl = document.getElementById("puLuckStatus");
+
+const CURRENT_POOL_NAME = "限定";
 
 /* ---------- 初始化 PU 區塊 ---------- */
 const puIds = ratesConfig.pu?.units || [];
@@ -80,7 +77,7 @@ if (puStatsBlock) {
   `;
 }
 
-/* ---------- 排隊 + 冷卻（不丟單） ---------- */
+/* ---------- 排隊 + 冷卻 ---------- */
 let queue = [];
 let running = false;
 const COOLDOWN_MS = 180;
@@ -145,7 +142,6 @@ function createCard(unit, isNew, isPU) {
   card.appendChild(imgBox); card.appendChild(info);
   return card;
 }
-
 function renderErrorCard(msg){
   grid.innerHTML = "";
   const card = document.createElement("article");
@@ -155,7 +151,6 @@ function renderErrorCard(msg){
 }
 
 /* ---------- 歐非值計算 ---------- */
-// SS 歐非值（50 抽門檻）
 function getLuckStatus() {
   const total = stats.totalDraws;
   if (total < 50) return "樣本不足";
@@ -170,13 +165,11 @@ function getLuckStatus() {
   if (deviation < 50)   return `偏歐 (${deviation.toFixed(1)}%)`;
   return `歐皇 🌟 (${deviation.toFixed(1)}%)`;
 }
-
-// PU 歐非值（50 抽門檻）
 function getPuLuckStatus() {
   const total = stats.totalDraws;
   if (total < 50) return "樣本不足";
   const actualPU = stats.puHits || Object.values(stats.puCounts).reduce((a,b)=>a+(b||0),0);
-  const expected = total * getPuTotalRate(); // PU 總理論機率
+  const expected = total * getPuTotalRate();
   if (expected <= 0) return "樣本不足";
   const deviation = ((actualPU - expected) / expected) * 100;
 
@@ -196,14 +189,12 @@ function applyStats(unit) {
   else if (unit.rarity === "S") stats.countS++;
   else if (unit.rarity === "SS") stats.countSS++;
 
-  // PU 計數
   const isPU = !!(ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id));
   if (isPU) {
     stats.puHits++;
     stats.puCounts[unit.id] = (stats.puCounts[unit.id] || 0) + 1;
   }
 
-  // 數字面板
   if (totalDrawsEl) totalDrawsEl.textContent = stats.totalDraws;
   if (quartzSpentEl) quartzSpentEl.textContent = stats.quartzSpent;
   if (countAEl) countAEl.textContent = stats.countA;
@@ -217,7 +208,6 @@ function applyStats(unit) {
   if (rateSEl) rateSEl.textContent = `${rs}%`;
   if (rateSSEl) rateSSEl.textContent = `${rss}%`;
 
-  // PU 命中統計 + 總 PU 命中率
   let totalPuHits = 0;
   for (const id of puIds) {
     totalPuHits += stats.puCounts[id] || 0;
@@ -235,11 +225,11 @@ function applyStats(unit) {
     totalRateEl.textContent = `PU 總命中率：${totalRate}%`;
   }
 
-  // 歐非值（SS / PU）
   if (luckEl)   luckEl.textContent   = getLuckStatus();
   if (puLuckEl) puLuckEl.textContent = getPuLuckStatus();
 }
 
+/* ---------- Reset ---------- */
 function resetStats() {
   stats.totalDraws = 0; stats.quartzSpent = 0;
   stats.countA = stats.countS = stats.countSS = 0;
@@ -258,11 +248,9 @@ function resetStats() {
   if (rateSSEl) rateSSEl.textContent = "0%";
   if (batchInfo) batchInfo.textContent = "—";
 
-  // 歐非值 reset
   if (luckEl)   luckEl.textContent   = "樣本不足";
   if (puLuckEl) puLuckEl.textContent = "樣本不足";
 
-  // PU 命中顯示 reset
   if (puStatsBlock) {
     puIds.forEach(id => {
       const hitEl = document.getElementById(`hit-${id}`);
@@ -273,6 +261,9 @@ function resetStats() {
     const totalRateEl = document.getElementById("puTotalRate");
     if (totalRateEl) totalRateEl.textContent = "PU 總命中率：0%";
   }
+
+  // 清空歷史紀錄
+  clearHistory();
 }
 
 /* ---------- 單抽 / 十連 ---------- */
@@ -286,6 +277,10 @@ async function doSingleTx() {
   grid.innerHTML = "";
   grid.appendChild(createCard(unit, isNew, isPU));
   applyStats(unit);
+
+  // 抽數 = 當前總抽數 + 1
+  addHistory(CURRENT_POOL_NAME, unit, isPU, stats.totalDraws, false);
+
   if (batchInfo) batchInfo.textContent = "本次：1 抽";
 }
 
@@ -296,12 +291,19 @@ async function doTenTx() {
   if (results.length > 10) results = results.slice(0, 10);
 
   const frag = document.createDocumentFragment();
-  for (const unit of results) {
+  const baseDraw = stats.totalDraws; // 記錄十連開始前的抽數
+
+  results.forEach((unit, idx) => {
     const isNew = !stats.obtained.has(unit.id);
     const isPU  = !!(ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id));
+    const isGuarantee = (idx === 9);
     stats.obtained.add(unit.id);
     frag.appendChild(createCard(unit, isNew, isPU));
-  }
+
+    // 抽數 = 抽卡前總數 + 第幾張
+    addHistory(CURRENT_POOL_NAME, unit, isPU, baseDraw + idx + 1, isGuarantee);
+  });
+
   grid.innerHTML = "";
   grid.appendChild(frag);
 
@@ -316,3 +318,10 @@ async function doTenTx() {
 btnSingle?.addEventListener("click", () => enqueue("single"));
 btnTen?.addEventListener("click", () => enqueue("ten"));
 btnReset?.addEventListener("click", () => { queue = []; resetStats(); });
+
+
+
+
+
+// 初始化歷史紀錄
+loadHistory();
