@@ -170,7 +170,38 @@
 }
 
 
+.tabs {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
 
+.tabBtn {
+  background: #1a1a1a;
+  color: #bbb;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.tabBtn:hover {
+  background: #333;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.tabBtn.active {
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+  color: #000;
+  font-weight: bold;
+  border-color: #4ade80;
+  box-shadow: 0 0 10px #4ade80aa;
+  transform: scale(1.03);
+}
 
 
     /* Layout */
@@ -245,12 +276,13 @@
       <div class="stats-summary">
         <span class="pill">抽卡 <b id="totalDraws">0</b></span>
         <span class="pill">石英 <b id="quartzSpent">0</b></span>
-        <!-- 放在 stats-summary 裡 -->
-<span class="pill">SS券 <b id="ticketSSSpent">0</b></span>
-<span class="pill">S券 <b id="ticketSSimpleSpent">0</b></span>
-<span class="pill">十連S券 <b id="ticketTenSSpent">0</b></span>
+        
 
       </div>
+      <span class="pill">SS券 <b id="ticketSSSpent">0</b></span>
+<span class="pill">S券 <b id="ticketSSimpleSpent">0</b></span>
+<span class="pill">十連S券 <b id="ticketTenSSpent">0</b></span>
+  </div>
     </header>
 
     <!-- Main -->
@@ -288,33 +320,56 @@
       </section>
     </main>
 
-    <!-- 統計紀錄 -->
-    <section class="stats-panel">
-      <h2>統計紀錄</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>稀有度</th>
-            <th>數量</th>
-            <th>比例</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>A</td><td id="countA">0</td><td id="rateA">0%</td></tr>
-          <tr><td>S</td><td id="countS">0</td><td id="rateS">0%</td></tr>
-          <tr><td>SS</td><td id="countSS">0</td><td id="rateSS">0%</td></tr>
-        </tbody>
-      </table>
-     <div class="legend" id="puStatsBlock" style="margin-top:10px"></div>
+<!-- 統計紀錄 -->
+<section class="stats-panel">
+  <h2>統計紀錄</h2>
+
+  <!-- 🔹 Tab 選擇欄 -->
+  <div class="tabs" style="margin-bottom:10px;">
+    <button class="tabBtn active" data-tab="normal">一般抽卡統計</button>
+    <button class="tabBtn" data-tab="ticketS">S 以上單抽券</button>
+    <button class="tabBtn" data-tab="ticketTenS">S 以上十連券</button>
+  </div>
+
+  <!-- 🔹 統計表 -->
+  <table>
+    <thead>
+      <tr>
+        <th>稀有度</th>
+        <th>數量</th>
+        <th>比例</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>A</td><td id="countA">0</td><td id="rateA">0%</td></tr>
+      <tr><td>S</td><td id="countS">0</td><td id="rateS">0%</td></tr>
+      <tr><td>SS</td><td id="countSS">0</td><td id="rateSS">0%</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 🔹 PU 命中率顯示 -->
+  <div class="legend" id="puStatsBlock" style="margin-top:10px"></div>
+
+  <!-- 🔹 歐非值顯示 -->
   <div class="pill" style="margin-top:10px">
-  歐非值：<b id="luckStatus">樣本不足</b>
+    歐非值：<b id="luckStatus">樣本不足</b>
+  </div>
+  <div class="pill" style="margin-top:6px">
+    PU 歐非值：<b id="puLuckStatus">樣本不足</b>
+  </div>
 
-</div>
-<div class="pill" style="margin-top:6px">
-  PU 歐非值：<b id="puLuckStatus">樣本不足</b>
-</div>
-
+  <!-- 🔹 資源統計 -->
+  <div style="margin-top:10px; font-size:0.9em; line-height:1.5;">
+    <div>💎 消耗石英：<b id="quartzSpent">0</b></div>
+    <div>🎟️ 保底SS券：<b id="ticketSSpent">0</b></div>
+    <div>🎟️ S券：<b id="ticketSSimpleSpent">0</b></div>
+    <div>🎟️ 十連S券：<b id="ticketTenSSpent">0</b></div>
+  </div>
+</section>
 <section class="history-panel">
+  
+  
+  
   <h2>歷史紀錄</h2>
   <div class="history-controls">
     <button class="btn small" id="btnSSStats" style="margin-left:8px;">查看 SS 統計</button>
