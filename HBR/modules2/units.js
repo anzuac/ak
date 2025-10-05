@@ -153,6 +153,7 @@ export const units = [
   { id: "ss048", name: "[少女的休息時間]神崎 阿黛爾海德", rarity: "SS", img: "AKanzakiSwim2024_R3.png" },
   { id: "ss049", name: "[向日葵]神崎 阿黛爾海德", rarity: "SS", img: "AKanzakiDirndl_R3.png" },
   { id: "ss050", name: "[Crying Tears]佐月 麻里", rarity: "SS", img: "MSatsukiBride_R3.png" },
+  { id: "ss000", name: "[暗殺者忍法絡繹不絕]佐月 麻里", rarity: "SS", img: "MSatsukiAgent_R3.png" },
   { id: "ss051", name: "[高如豔陽]佐月 麻里", rarity: "SS", img: "MSatsukiSwim2024_R3.png" },
   { id: "ss052", name: "[侍奉魔王的混世謀臣]佐月 麻里", rarity: "SS", img: "MSatsukiEvil_R3.png" },
   { id: "ss053", name: "[Infernal Sanctuart]白河 結奈", rarity: "SS", img: "YShirakawaBloom_R3.png" },
@@ -218,3 +219,4 @@ export const units = [
   { id: "ss113", name: "[獻上愛的晚餐]夏洛特•斯可波夫斯加", rarity: "SS", img: "CSkopovskayaKitchen_R3.png" }
 
 ];
+
