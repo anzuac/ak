@@ -12,7 +12,7 @@ const POOLS = ["normal", "ticketS", "ticketTenS"];
 const POOL_LABELS = {
   single: "一般",
   ten: "一般（十連）",
-  ticketSS: "保底 SS 券",     // 不進統計
+  ticketSS: "SS 券",     // 不進統計
   ticketS: "S 以上券",
   ticketTenS: "十連必得 S 券",
 };

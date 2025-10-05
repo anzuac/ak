@@ -31,7 +31,7 @@ export function loadHistory() {
 export function addHistory(poolName, unit, isPU, drawNumber, isGuarantee = false) {
   const rec = {
     id: Date.now() + Math.floor(Math.random() * 1000),
-    pool: poolName || "一般池",
+    pool: poolName || "一般",
     unitId: unit?.id ?? "",
     name: unit?.name ?? "(未知)",
     rarity: unit?.rarity ?? "A",
@@ -76,14 +76,17 @@ export function renderHistory() {
     const puTag = h.isPU ? "｜PU" : "";
     const gTag  = h.isGuarantee ? "｜保底" : "";
 
-    return `<li class="${cls}">[第 ${h.drawNumber} 抽${gTag}] [${time}] 池：${escapeHTML(h.pool)} ｜ ${h.rarity}${puTag} ｜ ${escapeHTML(h.name)}</li>`;
+    return `<li class="${cls}">
+      [第 ${h.drawNumber} 抽${gTag}] [${time}] 池：${escapeHTML(h.pool)} ｜ ${h.rarity}${puTag} ｜ ${escapeHTML(h.name)}
+    </li>`;
   });
 
   el.innerHTML = items.join("");
 
-  // 每次重繪後，讓畫面自動停留在「最上方」
+  // 每次重繪後固定停留在最上面（最新）
   el.scrollTop = 0;
 }
+
 /** 切換過濾模式："all" | "pu" */
 export function setFilter(mode) {
   filterMode = (mode === "pu") ? "pu" : "all";
@@ -93,17 +96,16 @@ export function setFilter(mode) {
 
 /**
  * 取得 SS 統計資料（供彈窗用）
- * 回傳 { rows:[{id,name,count}], totalDraws:number, ssTotal:number }
- * 自動偵測資料來源：in-memory / localStorage（相容不同欄位命名）
+ * 回傳 { rows:[{name,pool,count}], totalDraws:number, ssTotal:number }
+ * rows 依「同名 + 同池」分組（不顯示內部 id）
  */
 export function getSSStats() {
   let source = [];
   try {
-    // 優先使用當前記憶體資料
+    // 優先用記憶體；沒有再讀 localStorage
     if (Array.isArray(historyList) && historyList.length) {
       source = historyList;
     } else {
-      // 後備：讀 localStorage
       const raw = localStorage.getItem(STORAGE_KEY);
       source = raw ? JSON.parse(raw) : [];
     }
@@ -113,28 +115,30 @@ export function getSSStats() {
 
   const totalDraws = source.length;
 
-  // 兼容兩種結構：A) { unit:{id,name,rarity} }；B) { unitId/name/rarity 在外層 }
-  const ssOnly = source.filter(e => {
-    const rarity = e?.rarity ?? e?.unit?.rarity;
-    return rarity === "SS";
-  });
+  // 只取 SS
+  const ssOnly = source.filter(e => (e?.rarity ?? e?.unit?.rarity) === "SS");
   const ssTotal = ssOnly.length;
 
-  const map = new Map(); // key -> {id, name, count}
+  // 以「名稱 + 池」分組（名稱優先，避免顯示內部 id）
+  const map = new Map(); // key -> {name, pool, count}
+  const collator = new Intl.Collator("zh-Hant");
+
   for (const e of ssOnly) {
-    const id   = (e && (e.unitId || (e.unit && e.unit.id) || e.id)) || "";
-const name = (e && (e.name || (e.unit && e.unit.name))) || id || "(未知)";
-    const key  = id || name;
-    const rec  = map.get(key) || { id, name, count: 0 };
+    const name = (e && (e.name || e.unit?.name)) || "(未知)";
+    const pool = e?.pool || "一般";
+    const key  = `${name}||${pool}`;
+    const rec  = map.get(key) || { name, pool, count: 0 };
     rec.count++;
     map.set(key, rec);
   }
 
-  // 次數多→少；同次數用中文名排序
-  const collator = new Intl.Collator("zh-Hant");
-  const rows = Array.from(map.values()).sort(
-    (a, b) => (b.count - a.count) || collator.compare(a.name, b.name)
-  );
+  // 次數多→少；同次數按中文名；再按池名
+  const rows = Array.from(map.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    const byName = collator.compare(a.name, b.name);
+    if (byName !== 0) return byName;
+    return collator.compare(a.pool, b.pool);
+  });
 
   return { rows, totalDraws, ssTotal };
 }
