@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>抽卡模擬器 v0.2</title>
+  <title>抽卡模擬器票券 0.2版本</title>
   <meta name="color-scheme" content="dark light" />
   <style>
     :root{
@@ -279,7 +279,7 @@
         
 
       </div>
-      <span class="pill">SS券 <b id="ticketSSSpent">0</b></span>
+      <span class="pill">SS券 <b id="ticketSSpent">0</b></span>
 <span class="pill">S券 <b id="ticketSSimpleSpent">0</b></span>
 <span class="pill">十連S券 <b id="ticketTenSSpent">0</b></span>
   </div>
@@ -348,7 +348,6 @@
   </table>
 
   <!-- 🔹 PU 命中率顯示 -->
-  <div class="legend" id="puStatsBlock" style="margin-top:10px"></div>
 
   <!-- 🔹 歐非值顯示 -->
   <div class="pill" style="margin-top:10px">
@@ -358,12 +357,7 @@
     PU 歐非值：<b id="puLuckStatus">樣本不足</b>
   </div>
 
-  <!-- 🔹 資源統計 -->
-  <div style="margin-top:10px; font-size:0.9em; line-height:1.5;">
-    <div>💎 消耗石英：<b id="quartzSpent">0</b></div>
-    <div>🎟️ 保底SS券：<b id="ticketSSpent">0</b></div>
-    <div>🎟️ S券：<b id="ticketSSimpleSpent">0</b></div>
-    <div>🎟️ 十連S券：<b id="ticketTenSSpent">0</b></div>
+
   </div>
 </section>
 <section class="history-panel">
@@ -381,12 +375,11 @@
 
     <!-- Footer -->
     <footer class="footer">
-      抽卡模擬器 • 票券0.2
+      抽卡模擬器 • 票券版本
     </footer>
   </div>
 
   <!-- JS 模組 -->
   <script type="module" src="./modules3/stats.js"></script>
 </body>
-
 </html>
