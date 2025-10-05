@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>抽卡模擬器 測試版本2</title>
+  <title>抽卡模擬器v0.5</title>
   <meta name="color-scheme" content="dark light" />
   <style>
     :root{
@@ -54,7 +54,31 @@
 }
 #historyList li { margin: 2px 0; }
 
+/* Modal Base */
+.modal.hidden{ display:none }
+.modal{ position:fixed; inset:0; z-index:50; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.45); }
+.modal-panel{
+  position:absolute; inset:auto; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:min(92vw, 780px); max-height:70vh; overflow:auto;
+  background: linear-gradient(180deg, #15203b 0%, var(--panel, #121a2c) 100%);
+  border:1px solid #2c3c66; border-radius:14px; box-shadow:0 20px 50px rgba(0,0,0,.5);
+}
+.modal-header{ display:flex; align-items:center; justify-content:space-between; gap:8px;
+  position:sticky; top:0; padding:12px 14px; background:#17213a; border-bottom:1px solid #2b3c66; }
+.modal-header h3{ margin:0; font-size:16px; color:#d7e4ff }
+.modal-close{ appearance:none; border:0; background:#1b2541; color:#d6def1; padding:6px 10px; border-radius:8px; cursor:pointer }
 
+.modal-body{ padding:14px; }
+.table-wrap{ overflow:auto }
+.ss-table{ width:100%; border-collapse:collapse; color:#d9e4ff; font-size:14px }
+.ss-table th, .ss-table td{ padding:8px; border-bottom:1px solid #2b3c66; text-align:center }
+.ss-table th:first-child, .ss-table td:first-child{ text-align:left }
+.unit-cell{ display:flex; align-items:center; gap:8px }
+.dot{ width:8px; height:8px; border-radius:999px; display:inline-block }
+.dot-ss{ background:#ffd56b; box-shadow:0 0 10px #ffd56b88 }
+.muted{ color:#9aa3b2; margin-left:4px }
+.meta{ margin-top:10px; color:#9aa3b2; font-size:12px }
 
 .btn.small {
   padding:4px 10px;
@@ -211,7 +235,7 @@
     <!-- Header -->
     <header class="top-bar">
       <button class="back-btn" id="btnBack" aria-label="返回">←</button>
-      <h1 class="title">抽卡模擬器</h1>
+      <h1 class="title">抽卡模擬器(水瀨莓）</h1>
       <div class="stats-summary">
         <span class="pill">抽卡 <b id="totalDraws">0</b></span>
         <span class="pill">石英 <b id="quartzSpent">0</b></span>
@@ -273,6 +297,7 @@
 <section class="history-panel">
   <h2>歷史紀錄</h2>
   <div class="history-controls">
+    <button class="btn small" id="btnSSStats" style="margin-left:8px;">查看 SS 統計</button>
 
   </div>
   <div class="history-list" id="historyList"></div>
@@ -281,7 +306,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-      抽卡模擬器 • 測試版2
+      抽卡模擬器 • V0.5
     </footer>
   </div>
 
