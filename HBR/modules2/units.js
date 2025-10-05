@@ -102,7 +102,7 @@ export const units = [
 
   // === SS 級角色 ===
   //{ id: "ss999", name: "[激烈!招來勝利的一球入魂!]茅森 月歌", rarity: "SS", img: "RKayamoriHR_R3.png" }, // PU
-  { id: "ss999", name: "[激戰!轟出去的全壘打]水瀨 莓", rarity: "SS", img: "IMinaseHR_R3.png" },
+  { id: "ss999", name: "[激戰!轟出去的全壘打]水瀨 莓", rarity: "SS", img: "IMinaseHR_R3" },
   { id: "ss001", name: "[騎士的真洪殘響]茅森 月歌", rarity: "SS", img: "RKayamoriGothic_R3.png" },
   { id: "ss002", name: "[夜間巡航護送者]茅森 月歌", rarity: "SS", img: "RKayamoriAnniv2023_R3.png" },
   { id: "ss003", name: "[皎潔之華麗歌姬]茅森 月歌", rarity: "SS", img: "RKayamoriDiva_R3.png" },
@@ -153,7 +153,6 @@ export const units = [
   { id: "ss048", name: "[少女的休息時間]神崎 阿黛爾海德", rarity: "SS", img: "AKanzakiSwim2024_R3.png" },
   { id: "ss049", name: "[向日葵]神崎 阿黛爾海德", rarity: "SS", img: "AKanzakiDirndl_R3.png" },
   { id: "ss050", name: "[Crying Tears]佐月 麻里", rarity: "SS", img: "MSatsukiBride_R3.png" },
-  { id: "ss000", name: "[暗殺者忍法絡繹不絕]佐月 麻里", rarity: "SS", img: "MSatsukiAgent_R3.png" },
   { id: "ss051", name: "[高如豔陽]佐月 麻里", rarity: "SS", img: "MSatsukiSwim2024_R3.png" },
   { id: "ss052", name: "[侍奉魔王的混世謀臣]佐月 麻里", rarity: "SS", img: "MSatsukiEvil_R3.png" },
   { id: "ss053", name: "[Infernal Sanctuart]白河 結奈", rarity: "SS", img: "YShirakawaBloom_R3.png" },
@@ -217,6 +216,4 @@ export const units = [
   { id: "ss111", name: "[永久的思念]夏洛特•斯可波夫斯加", rarity: "SS", img: "CSkopovskayaVampire_R3.png" },
   { id: "ss112", name: "[聖潔新娘]夏洛特•斯可波夫斯加", rarity: "SS", img: "CSkopovskayaBride_R3.png" },
   { id: "ss113", name: "[獻上愛的晚餐]夏洛特•斯可波夫斯加", rarity: "SS", img: "CSkopovskayaKitchen_R3.png" }
-
 ];
-

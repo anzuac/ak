@@ -1,31 +1,35 @@
-// history.js － 抽卡歷史紀錄（上限2000＋亮光特效＋PU過濾＋第幾抽＋保底標記）
+// history.js － 抽卡歷史紀錄 (文字版 + PU 過濾 + 保底 + SS 統計 + 永續化)
 
 const STORAGE_KEY = "gachaHistory_v1";
 const MAX_HISTORY = 2000;
 
-let history = [];
-let showOnlyPU = false; // ← 控制是否只顯示 PU
+let historyList = [];          // 主要資料來源（會從 localStorage 載入）
+let filterMode  = "all";       // "all" | "pu"
 
-/* ---------- 載入 ---------- */
+/* ------------------------- 對外 API ------------------------- */
+
+/** 初始化：從 localStorage 載入並渲染 */
 export function loadHistory() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    history = raw ? JSON.parse(raw) : [];
+    historyList = raw ? JSON.parse(raw) : [];
   } catch {
-    history = [];
+    historyList = [];
   }
-  
-  if (history.length > MAX_HISTORY) {
-    history = history.slice(history.length - MAX_HISTORY);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history)); } catch {}
+  if (!Array.isArray(historyList)) historyList = [];
+
+  // 上限裁切
+  if (historyList.length > MAX_HISTORY) {
+    historyList = historyList.slice(historyList.length - MAX_HISTORY);
+    persist();
   }
-  
+
   renderHistory();
 }
 
-/* ---------- 新增 ---------- */
+/** 新增一筆歷史紀錄 */
 export function addHistory(poolName, unit, isPU, drawNumber, isGuarantee = false) {
-  const record = {
+  const rec = {
     id: Date.now() + Math.floor(Math.random() * 1000),
     pool: poolName || "一般池",
     unitId: unit?.id ?? "",
@@ -34,58 +38,113 @@ export function addHistory(poolName, unit, isPU, drawNumber, isGuarantee = false
     isPU: !!isPU,
     timestamp: Date.now(),
     drawNumber: drawNumber || 0,
-    isGuarantee
+    isGuarantee: !!isGuarantee,
   };
-  
-  history.push(record);
-  
-  if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
-  
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-  } catch {}
-  
+
+  historyList.push(rec);
+  if (historyList.length > MAX_HISTORY) {
+    historyList.splice(0, historyList.length - MAX_HISTORY);
+  }
+  persist();
   renderHistory();
 }
 
-/* ---------- 清空 ---------- */
+/** 清空歷史紀錄 */
 export function clearHistory() {
-  history = [];
+  historyList = [];
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
   renderHistory();
 }
 
-/* ---------- 渲染 ---------- */
+/** 重新渲染（最新在最上面） */
 export function renderHistory() {
-  const list = document.getElementById("historyList");
-  if (!list) return;
-  
-  const data = showOnlyPU ? history.filter(h => h.isPU) : history;
-  
+  const el = document.getElementById("historyList");
+  if (!el) return;
+
+  const data = (filterMode === "pu")
+    ? historyList.filter(h => h.isPU)
+    : historyList;
+
+  // 由新到舊（最新在最上面）
   const items = [...data].reverse().map(h => {
     const time = new Date(h.timestamp).toLocaleString();
     let cls = (h.rarity === "SS") ? "hist-SS" :
-      (h.rarity === "S") ? "hist-S" : "hist-A";
+              (h.rarity === "S")  ? "hist-S"  : "hist-A";
     if (h.isPU) cls += " hist-PU";
     if (h.isGuarantee) cls += " hist-Guarantee";
-    
+
     const puTag = h.isPU ? "｜PU" : "";
-    const gTag = h.isGuarantee ? "｜保底" : "";
-    
+    const gTag  = h.isGuarantee ? "｜保底" : "";
+
     return `<li class="${cls}">[第 ${h.drawNumber} 抽${gTag}] [${time}] 池：${escapeHTML(h.pool)} ｜ ${h.rarity}${puTag} ｜ ${escapeHTML(h.name)}</li>`;
   });
-  
-  list.innerHTML = items.join("");
-}
 
-/* ---------- PU 過濾切換 ---------- */
-export function togglePUFilter() {
-  showOnlyPU = !showOnlyPU;
+  el.innerHTML = items.join("");
+
+  // 每次重繪後，讓畫面自動停留在「最上方」
+  el.scrollTop = 0;
+}
+/** 切換過濾模式："all" | "pu" */
+export function setFilter(mode) {
+  filterMode = (mode === "pu") ? "pu" : "all";
   renderHistory();
-  return showOnlyPU;
+  return filterMode;
 }
 
-/* ---------- 工具 ---------- */
+/**
+ * 取得 SS 統計資料（供彈窗用）
+ * 回傳 { rows:[{id,name,count}], totalDraws:number, ssTotal:number }
+ * 自動偵測資料來源：in-memory / localStorage（相容不同欄位命名）
+ */
+export function getSSStats() {
+  let source = [];
+  try {
+    // 優先使用當前記憶體資料
+    if (Array.isArray(historyList) && historyList.length) {
+      source = historyList;
+    } else {
+      // 後備：讀 localStorage
+      const raw = localStorage.getItem(STORAGE_KEY);
+      source = raw ? JSON.parse(raw) : [];
+    }
+  } catch {
+    source = [];
+  }
+
+  const totalDraws = source.length;
+
+  // 兼容兩種結構：A) { unit:{id,name,rarity} }；B) { unitId/name/rarity 在外層 }
+  const ssOnly = source.filter(e => {
+    const rarity = e?.rarity ?? e?.unit?.rarity;
+    return rarity === "SS";
+  });
+  const ssTotal = ssOnly.length;
+
+  const map = new Map(); // key -> {id, name, count}
+  for (const e of ssOnly) {
+    const id   = (e && (e.unitId || (e.unit && e.unit.id) || e.id)) || "";
+const name = (e && (e.name || (e.unit && e.unit.name))) || id || "(未知)";
+    const key  = id || name;
+    const rec  = map.get(key) || { id, name, count: 0 };
+    rec.count++;
+    map.set(key, rec);
+  }
+
+  // 次數多→少；同次數用中文名排序
+  const collator = new Intl.Collator("zh-Hant");
+  const rows = Array.from(map.values()).sort(
+    (a, b) => (b.count - a.count) || collator.compare(a.name, b.name)
+  );
+
+  return { rows, totalDraws, ssTotal };
+}
+
+/* ------------------------- 內部工具 ------------------------- */
+
+function persist() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(historyList)); } catch {}
+}
+
 function escapeHTML(s) {
   return String(s)
     .replace(/&/g, "&amp;")
