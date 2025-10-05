@@ -1,10 +1,13 @@
-// stats.js － 抽卡結果統計 + PU 統計 + 歐非值 (SS/PU) + 歷史紀錄
-import { drawOne, drawTen } from "./gacha_core.js";
-import { ratesConfig } from "./rates.js";
+// stats.js — 抽卡統計 + PU 統計 + 歐非值 + 歷史紀錄 + 票券抽卡 + 資源消耗（preset 版）
+import { drawPreset } from "./gacha_core.js";
+import { ratesConfig } from "./rates_ticket.js"; // ★ 本檔直接用票券版設定
 import { units } from "./units.js";
 import { addHistory, loadHistory, clearHistory } from "./history.js";
+import { mountSSStatsButton } from "./ss_stats_modal.js";
 
-/* ---------- 工具：讀取理論機率 ---------- */
+mountSSStatsButton("btnSSStats");
+
+/* ---------- 工具：理論機率 ---------- */
 function getSSRate() {
   const v =
     (ratesConfig.pool && ratesConfig.pool.SS) ??
@@ -12,7 +15,7 @@ function getSSRate() {
     (ratesConfig.tables && ratesConfig.tables.single && ratesConfig.tables.single.SS) ??
     ratesConfig.SS;
   const n = Number(v);
-  return Number.isFinite(n) ? n / 100 : 0.03; // 預設 3%
+  return Number.isFinite(n) ? n / 100 : 0.03;
 }
 function getPuTotalRate() {
   const pu = ratesConfig.pu || {};
@@ -36,15 +39,19 @@ const stats = {
   countSS: 0,
   puHits: 0,
   puCounts: {},
-  obtained: new Set()
+  obtained: new Set(),
+  ticketSpent: { ss: 0, s: 0, tenS: 0 }
 };
 
 /* ---------- DOM ---------- */
 const btnSingle = document.getElementById("btnSingle");
 const btnTen = document.getElementById("btnTen");
 const btnReset = document.getElementById("btnReset");
-const grid = document.getElementById("resultsGrid");
+const btnTicketSS = document.getElementById("btnTicketSS");
+const btnTicketS = document.getElementById("btnTicketS");
+const btnTicketTenS = document.getElementById("btnTicketTenS");
 
+const grid = document.getElementById("resultsGrid");
 const totalDrawsEl = document.getElementById("totalDraws");
 const quartzSpentEl = document.getElementById("quartzSpent");
 const countAEl = document.getElementById("countA");
@@ -58,9 +65,14 @@ const puStatsBlock = document.getElementById("puStatsBlock");
 const luckEl = document.getElementById("luckStatus");
 const puLuckEl = document.getElementById("puLuckStatus");
 
+// 票券欄位（可選）
+const ticketSSpentEl       = document.getElementById("ticketSSSpent");
+const ticketSSimpleSpentEl = document.getElementById("ticketSSimpleSpent");
+const ticketTenSSpentEl    = document.getElementById("ticketTenSSpent");
+
 const CURRENT_POOL_NAME = "限定";
 
-/* ---------- 初始化 PU 區塊 ---------- */
+/* ---------- PU 區塊 ---------- */
 const puIds = ratesConfig.pu?.units || [];
 stats.puCounts = Object.fromEntries(puIds.map(id => [id, 0]));
 
@@ -77,14 +89,23 @@ if (puStatsBlock) {
   `;
 }
 
+/* ---------- 資源 UI ---------- */
+function updateResourceUI() {
+  if (quartzSpentEl) quartzSpentEl.textContent = stats.quartzSpent;
+  if (ticketSSpentEl)       ticketSSpentEl.textContent       = stats.ticketSpent.ss;
+  if (ticketSSimpleSpentEl) ticketSSimpleSpentEl.textContent = stats.ticketSpent.s;
+  if (ticketTenSSpentEl)    ticketTenSSpentEl.textContent    = stats.ticketSpent.tenS;
+}
+
 /* ---------- 排隊 + 冷卻 ---------- */
 let queue = [];
 let running = false;
 const COOLDOWN_MS = 180;
 
 function setBusy(b) {
-  if (btnSingle) btnSingle.disabled = b;
-  if (btnTen) btnTen.disabled = b;
+  [btnSingle, btnTen, btnTicketSS, btnTicketS, btnTicketTenS].forEach(btn => {
+    if (btn) btn.disabled = b;
+  });
   document.querySelector(".results")?.setAttribute("aria-busy", b ? "true" : "false");
 }
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
@@ -96,8 +117,17 @@ async function processQueue() {
     while (queue.length) {
       const job = queue.shift();
       try {
-        if (job.type === "single") await doSingleTx();
-        else if (job.type === "ten") await doTenTx();
+        if (job.type === "single") {
+          await runPreset("single", "本次：1 抽");
+        } else if (job.type === "ten") {
+          await runPreset("ten", "本次：10 連");
+        } else if (job.type === "ticketSS") {
+          await runPreset("ticketSS", "🎟️ 保底 SS 抽卡");
+        } else if (job.type === "ticketS") {
+          await runPreset("ticketS", "🎟️ S 以上抽卡");
+        } else if (job.type === "ticketTenS") {
+          await runPreset("ticketTenS", "🎟️ 十連必得 S 以上");
+        }
       } catch (e) {
         console.error("[draw error]", e);
         renderErrorCard(String(e?.message || e || "抽卡失敗"));
@@ -116,18 +146,13 @@ const FALLBACK_DATA_URL =
 function createCard(unit, isNew, isPU) {
   const card = document.createElement("article");
   card.className = `card rarity-${unit?.rarity || "A"}`;
-
   const imgBox = document.createElement("div");
   imgBox.className = "card-img";
-
   const img = document.createElement("img");
   img.src = `assets/images/units/${unit?.img || ""}`;
   img.alt = unit?.name || "unknown";
   img.loading = "lazy";
-  img.onerror = function onErrOnce() {
-    this.onerror = null;
-    this.src = FALLBACK_DATA_URL;
-  };
+  img.onerror = function onErrOnce() { this.onerror = null; this.src = FALLBACK_DATA_URL; };
   imgBox.appendChild(img);
 
   const tags = document.createElement("div"); tags.className = "tags";
@@ -138,19 +163,14 @@ function createCard(unit, isNew, isPU) {
   const info = document.createElement("div"); info.className = "card-info";
   const name = document.createElement("p"); name.className = "name"; name.textContent = unit?.name || "(未知)";
   info.appendChild(name);
-
   card.appendChild(imgBox); card.appendChild(info);
   return card;
 }
 function renderErrorCard(msg){
-  grid.innerHTML = "";
-  const card = document.createElement("article");
-  card.className = "card rarity-A";
-  card.innerHTML = `<div class="card-info"><p class="name">⚠ 抽卡顯示失敗</p><p class="subtitle">${msg}</p></div>`;
-  grid.appendChild(card);
+  grid.innerHTML = `<article class="card rarity-A"><div class="card-info"><p class="name">⚠ 抽卡顯示失敗</p><p class="subtitle">${msg}</p></div></article>`;
 }
 
-/* ---------- 歐非值計算 ---------- */
+/* ---------- 歐非值 ---------- */
 function getLuckStatus() {
   const total = stats.totalDraws;
   if (total < 50) return "樣本不足";
@@ -158,7 +178,6 @@ function getLuckStatus() {
   const expected = total * getSSRate();
   if (expected <= 0) return "樣本不足";
   const deviation = ((actualSS - expected) / expected) * 100;
-
   if (deviation <= -50) return `非洲酋長 💀 (${deviation.toFixed(1)}%)`;
   if (deviation <= -25) return `偏非 (${deviation.toFixed(1)}%)`;
   if (deviation < 25)   return `正常 (${deviation.toFixed(1)}%)`;
@@ -172,7 +191,6 @@ function getPuLuckStatus() {
   const expected = total * getPuTotalRate();
   if (expected <= 0) return "樣本不足";
   const deviation = ((actualPU - expected) / expected) * 100;
-
   if (deviation <= -50) return `非洲酋長 💀 (${deviation.toFixed(1)}%)`;
   if (deviation <= -25) return `偏非 (${deviation.toFixed(1)}%)`;
   if (deviation < 25)   return `正常 (${deviation.toFixed(1)}%)`;
@@ -180,10 +198,9 @@ function getPuLuckStatus() {
   return `歐皇 🌟 (${deviation.toFixed(1)}%)`;
 }
 
-/* ---------- 更新統計 ---------- */
+/* ---------- 更新統計（此函式不直接扣石英，統一由 runPreset 套成本） ---------- */
 function applyStats(unit) {
   stats.totalDraws++;
-  stats.quartzSpent += ratesConfig.drawCost;
 
   if (unit.rarity === "A") stats.countA++;
   else if (unit.rarity === "S") stats.countS++;
@@ -196,7 +213,6 @@ function applyStats(unit) {
   }
 
   if (totalDrawsEl) totalDrawsEl.textContent = stats.totalDraws;
-  if (quartzSpentEl) quartzSpentEl.textContent = stats.quartzSpent;
   if (countAEl) countAEl.textContent = stats.countA;
   if (countSEl) countSEl.textContent = stats.countS;
   if (countSSEl) countSSEl.textContent = stats.countSS;
@@ -208,6 +224,7 @@ function applyStats(unit) {
   if (rateSEl) rateSEl.textContent = `${rs}%`;
   if (rateSSEl) rateSSEl.textContent = `${rss}%`;
 
+  // PU 小卡
   let totalPuHits = 0;
   for (const id of puIds) {
     totalPuHits += stats.puCounts[id] || 0;
@@ -225,21 +242,26 @@ function applyStats(unit) {
     totalRateEl.textContent = `PU 總命中率：${totalRate}%`;
   }
 
-  if (luckEl)   luckEl.textContent   = getLuckStatus();
+  if (luckEl) luckEl.textContent = getLuckStatus();
   if (puLuckEl) puLuckEl.textContent = getPuLuckStatus();
 }
 
 /* ---------- Reset ---------- */
 function resetStats() {
-  stats.totalDraws = 0; stats.quartzSpent = 0;
-  stats.countA = stats.countS = stats.countSS = 0;
-  stats.puHits = 0;
-  stats.puCounts = Object.fromEntries(puIds.map(id => [id, 0]));
-  stats.obtained.clear();
+  Object.assign(stats, {
+    totalDraws: 0,
+    quartzSpent: 0,
+    countA: 0,
+    countS: 0,
+    countSS: 0,
+    puHits: 0,
+    puCounts: Object.fromEntries(puIds.map(id => [id, 0])),
+    obtained: new Set(),
+    ticketSpent: { ss: 0, s: 0, tenS: 0 }
+  });
 
   grid.innerHTML = "";
   if (totalDrawsEl) totalDrawsEl.textContent = 0;
-  if (quartzSpentEl) quartzSpentEl.textContent = 0;
   if (countAEl) countAEl.textContent = 0;
   if (countSEl) countSEl.textContent = 0;
   if (countSSEl) countSSEl.textContent = 0;
@@ -247,81 +269,62 @@ function resetStats() {
   if (rateSEl) rateSEl.textContent = "0%";
   if (rateSSEl) rateSSEl.textContent = "0%";
   if (batchInfo) batchInfo.textContent = "—";
-
-  if (luckEl)   luckEl.textContent   = "樣本不足";
+  if (luckEl) luckEl.textContent = "樣本不足";
   if (puLuckEl) puLuckEl.textContent = "樣本不足";
 
-  if (puStatsBlock) {
-    puIds.forEach(id => {
-      const hitEl = document.getElementById(`hit-${id}`);
-      const rateEl = document.getElementById(`rate-${id}`);
-      if (hitEl) hitEl.textContent = "0";
-      if (rateEl) rateEl.textContent = "0%";
-    });
-    const totalRateEl = document.getElementById("puTotalRate");
-    if (totalRateEl) totalRateEl.textContent = "PU 總命中率：0%";
-  }
-
-  // 清空歷史紀錄
+  updateResourceUI();
   clearHistory();
 }
 
-/* ---------- 單抽 / 十連 ---------- */
-async function doSingleTx() {
-  const unit = drawOne("general");
-  if (!unit) throw new Error("單抽回傳空結果");
-  const isNew = !stats.obtained.has(unit.id);
-  const isPU  = !!(ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id));
-  stats.obtained.add(unit.id);
-
-  grid.innerHTML = "";
-  grid.appendChild(createCard(unit, isNew, isPU));
-  applyStats(unit);
-
-  // 抽數 = 當前總抽數 + 1
-  addHistory(CURRENT_POOL_NAME, unit, isPU, stats.totalDraws, false);
-
-  if (batchInfo) batchInfo.textContent = "本次：1 抽";
-}
-
-async function doTenTx() {
-  let results = drawTen() || [];
-  results = results.filter(Boolean);
-  while (results.length < 10) results.push(drawOne("general"));
-  if (results.length > 10) results = results.slice(0, 10);
+/* ---------- runPreset（統一抽卡入口） ---------- */
+async function runPreset(presetKey, batchLabel) {
+  const { units: list, cost } = drawPreset(presetKey);
 
   const frag = document.createDocumentFragment();
-  const baseDraw = stats.totalDraws; // 記錄十連開始前的抽數
+  const base = stats.totalDraws;
 
-  results.forEach((unit, idx) => {
-    const isNew = !stats.obtained.has(unit.id);
+  list.forEach((unit, idx) => {
     const isPU  = !!(ratesConfig.pu?.enabled && ratesConfig.pu.units.includes(unit.id));
-    const isGuarantee = (idx === 9);
+    const isNew = !stats.obtained.has(unit.id);
+    // 標註是否為保底：十連類型的最後一抽 + 單抽券亦可視為保底
+    const isGuarantee =
+      (presetKey === "ten" || presetKey === "ticketTenS") ? (idx === list.length - 1) :
+      (presetKey === "ticketS" || presetKey === "ticketSS") ? true : false;
+
     stats.obtained.add(unit.id);
     frag.appendChild(createCard(unit, isNew, isPU));
 
-    // 抽數 = 抽卡前總數 + 第幾張
-    addHistory(CURRENT_POOL_NAME, unit, isPU, baseDraw + idx + 1, isGuarantee);
+    applyStats(unit);
+    addHistory(CURRENT_POOL_NAME, unit, isPU, base + idx + 1, isGuarantee);
   });
 
+  // 套用成本（統一處理）
+  stats.quartzSpent += Number(cost.quartz) || 0;
+  if (cost.tickets?.s)    stats.ticketSpent.s    += cost.tickets.s;
+  if (cost.tickets?.tenS) stats.ticketSpent.tenS += cost.tickets.tenS;
+  if (cost.tickets?.ss)   stats.ticketSpent.ss   += cost.tickets.ss;
+  updateResourceUI();
+
+  // 顯示結果
   grid.innerHTML = "";
   grid.appendChild(frag);
 
-  for (const unit of results) {
-    try { applyStats(unit); }
-    catch (err) { console.error("applyStats failed", unit, err); }
+  if (batchInfo) {
+    const parts = [];
+    if (cost.quartz) parts.push(`石英 ${cost.quartz}`);
+    if (cost.tickets?.s)    parts.push(`S券 x${cost.tickets.s}`);
+    if (cost.tickets?.tenS) parts.push(`十連S券 x${cost.tickets.tenS}`);
+    if (cost.tickets?.ss)   parts.push(`SS券 x${cost.tickets.ss}`);
+    batchInfo.textContent = `${batchLabel}｜消耗：${parts.join("、") || "—"}`;
   }
-  if (batchInfo) batchInfo.textContent = "本次：10 連";
 }
 
-/* ---------- 事件 ---------- */
-btnSingle?.addEventListener("click", () => enqueue("single"));
-btnTen?.addEventListener("click", () => enqueue("ten"));
-btnReset?.addEventListener("click", () => { queue = []; resetStats(); });
+/* ---------- 事件綁定 ---------- */
+btnSingle?.addEventListener("click",     () => enqueue("single"));
+btnTen?.addEventListener("click",        () => enqueue("ten"));
+btnReset?.addEventListener("click",      () => { queue = []; resetStats(); });
+btnTicketSS?.addEventListener("click",   () => enqueue("ticketSS"));
+btnTicketS?.addEventListener("click",    () => enqueue("ticketS"));
+btnTicketTenS?.addEventListener("click", () => enqueue("ticketTenS"));
 
-
-
-
-
-// 初始化歷史紀錄
 loadHistory();
