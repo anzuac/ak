@@ -102,7 +102,7 @@ export const units = [
 
   // === SS 級角色 ===
   //{ id: "ss999", name: "[激烈!招來勝利的一球入魂!]茅森 月歌", rarity: "SS", img: "RKayamoriHR_R3.png" }, // PU
-  { id: "ss999", name: "[激戰!轟出去的全壘打]水瀨 莓", rarity: "SS", img: "IMinaseHR_R3" },
+  { id: "ss999", name: "[激戰!轟出去的全壘打]水瀨 莓", rarity: "SS", img: "IMinaseHR_R3.png" },
   { id: "ss001", name: "[騎士的真洪殘響]茅森 月歌", rarity: "SS", img: "RKayamoriGothic_R3.png" },
   { id: "ss002", name: "[夜間巡航護送者]茅森 月歌", rarity: "SS", img: "RKayamoriAnniv2023_R3.png" },
   { id: "ss003", name: "[皎潔之華麗歌姬]茅森 月歌", rarity: "SS", img: "RKayamoriDiva_R3.png" },
