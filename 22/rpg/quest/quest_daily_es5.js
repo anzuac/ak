@@ -1,12 +1,12 @@
-// quest_daily_es5.js — V4（不相容舊版）：6 小時輪換、任務堆疊上限 10、獎勵偏小數、領取即移除
+// quest_daily_es5.js — V4.1（不相容舊版）：6 小時輪換、任務堆疊上限 10、獎勵預先決定、領取即移除、顯示下次輪換
 (function(){
   if (!window.QuestCore) return;
 
   // 使用你的主命名空間
-  var STORAGE_KEY = "DAILY_STATE_V5";
+  var STORAGE_KEY = "DAILY_STATE_V4";
 
   // 參數
-  var SLOT_ADD_PER_ROTATION = 0;  // 每次輪換最多新增任務數
+  var SLOT_ADD_PER_ROTATION = 3;  // 每次輪換最多新增任務數
   var PENDING_CAP = 10;           // 未領取任務上限（未完成 + 完成未領）
   var SKEW_ALPHA_STONE = 2.0;     // 數值越大越偏小
   var SKEW_ALPHA_GOLD  = 2.2;
@@ -18,6 +18,30 @@
     var slotStart = (H<6)?0 : (H<12)?6 : (H<18)?12 : 18;
     var y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), da=('0'+d.getDate()).slice(-2);
     return y+'-'+m+'-'+da+'-'+('0'+slotStart).slice(-2);
+  }
+
+  // 下次輪換時間
+  function nextRotationDate(){
+    var d = new Date();
+    var h = d.getHours();
+    if (h < 6)  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 6, 0, 0, 0);
+    if (h < 12) return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+    if (h < 18) return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 18, 0, 0, 0);
+    // >= 18 → 次日 00:00
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0);
+  }
+
+  function fmt2(n){ return (n<10?'0':'')+n; }
+  function fmtDateTime(dt){
+    return dt.getFullYear() + '-' + fmt2(dt.getMonth()+1) + '-' + fmt2(dt.getDate()) +
+           ' ' + fmt2(dt.getHours()) + ':' + fmt2(dt.getMinutes());
+  }
+  function msToHMS(ms){
+    if (ms < 0) ms = 0;
+    var s = Math.floor(ms/1000);
+    var h = Math.floor(s/3600); s -= h*3600;
+    var m = Math.floor(s/60);   s -= m*60;
+    return fmt2(h)+':'+fmt2(m)+':'+fmt2(s);
   }
 
   function getRandomInt(min, max){
@@ -39,7 +63,7 @@
     slotKey: "",                               // 當前輪換鍵
     progress: { kills:0, goldGain:0, stoneGain:0 },
     // 任務池：可 >3，堆疊到 10
-    // 每項：{ uid, templateId, type, name, target, done, claimed }
+    // 每項：{ uid, templateId, type, name, target, done, claimed, reward:{stone,gold} }
     tasks: [],
     finishedCountThisSlot: 0
   };
@@ -55,36 +79,48 @@
       }
     }catch(e){}
     ensureSlot();
+    ensureTaskRewards(); // 舊任務補獎勵欄位
   }
 
-function ensureSlot(){
-  var curKey = sixHourKey();
+  function ensureSlot(){
+    var curKey = sixHourKey();
+    if (state.slotKey !== curKey){
+      state.slotKey = curKey;
 
-  // 跨 6 小時輪換 → 重設 slot、清掉已領、依上限補任務、重置視窗內進度
-  if (state.slotKey !== curKey){
-    state.slotKey = curKey;
+      // 清掉已領取任務（理論上領取即移除，這裡保潔）
+      state.tasks = state.tasks.filter(function(t){ return !t.claimed; });
 
-    // 清掉已領（保潔）
-    state.tasks = state.tasks.filter(function(t){ return !t.claimed; });
-
-    // 只在輪換時補任務
-    var pending = countPending();
-    if (pending < PENDING_CAP){
-      var add = Math.min(SLOT_ADD_PER_ROTATION, PENDING_CAP - pending);
-      appendNewTasks(add);
+      // 只在輪換時：若未領任務 < 上限，補任務
+      var pending = countPending();
+      if (pending < PENDING_CAP){
+        var add = Math.min(SLOT_ADD_PER_ROTATION, PENDING_CAP - pending);
+        appendNewTasks(add);
+      }
+      // 重置本輪完成計數（僅顯示用途）
+      state.finishedCountThisSlot = 0;
+      // 重置 6 小時視窗內的進度（讓每輪都重新計）
+      state.progress = { kills:0, goldGain:0, stoneGain:0 };
+      save();
+    } else {
+      // ✅ 同一個 slot：不再因為「任務清空」就自動補
+      // 保持空集合，等下一次輪換時再補
     }
-
-    state.finishedCountThisSlot = 0;
-    state.progress = { kills:0, goldGain:0, stoneGain:0 };
-    save();
-
-  } else {
-    // ✅ 同一個 slot：不再因為「任務清空」就自動補
-    // （保持空集合，等下一次輪換時再補）
-    // 如果你希望「首次啟動且完全沒有狀態」要補初始任務，
-    // 這在首次載入時 slotKey===""，已由上面的分支處理到。
   }
-}
+
+  function ensureTaskRewards(){
+    var changed = false;
+    for (var i=0;i<state.tasks.length;i++){
+      var t = state.tasks[i];
+      if (!t.reward || typeof t.reward.stone !== 'number' || typeof t.reward.gold !== 'number'){
+        t.reward = {
+          stone: skewedInt(20, 400, SKEW_ALPHA_STONE),
+          gold:  roundTo10(skewedInt(100, 3000, SKEW_ALPHA_GOLD))
+        };
+        changed = true;
+      }
+    }
+    if (changed) save();
+  }
 
   function countPending(){
     var n=0;
@@ -94,7 +130,7 @@ function ensureSlot(){
     return n;
   }
 
-  // 依模板生成任務，追加到 tasks 尾端
+  // 依模板生成任務，追加到 tasks 尾端（建立時就決定獎勵）
   function appendNewTasks(n){
     var pool = (missionRewards && missionRewards.dailyTemplates) ? missionRewards.dailyTemplates.slice() : [
       { templateId:'kill',  type:'kills',     targetMin:5,  targetMax:20,  buildName:function(t){return '擊敗 '+t+' 隻怪';} },
@@ -112,6 +148,11 @@ function ensureSlot(){
       var target = getRandomInt(t.targetMin, t.targetMax);
       if (t.type === 'goldGain') target = roundTo10(target);
       var name = (typeof t.buildName === 'function') ? t.buildName(target) : (t.templateId + ' ' + target);
+
+      // 建立時就決定獎勵（之後不變）
+      var stoneAmt = skewedInt(20, 400, SKEW_ALPHA_STONE);
+      var goldAmt  = roundTo10(skewedInt(100, 3000, SKEW_ALPHA_GOLD));
+
       state.tasks.push({
         uid: t.templateId + "_" + Date.now() + "_" + Math.floor(Math.random()*10000),
         templateId: t.templateId,
@@ -119,17 +160,16 @@ function ensureSlot(){
         name: name,
         target: target,
         done: false,
-        claimed: false
+        claimed: false,
+        reward: { stone: stoneAmt, gold: goldAmt }
       });
     }
   }
 
-  // —— 獎勵：兩種都給（偏向小數）——
-  function grantTaskRewards(){
-    // 強化石：20–400（偏小）
-    var stoneAmt = skewedInt(20, 400, SKEW_ALPHA_STONE);
-    // 金幣：100–3000（偏小，整十）
-    var goldAmt  = roundTo10(skewedInt(100, 3000, SKEW_ALPHA_GOLD));
+  // —— 獎勵：使用任務上預先決定的數值 ——
+  function grantTaskRewards(task){
+    var stoneAmt = (task && task.reward && Number(task.reward.stone)) || skewedInt(20, 400, SKEW_ALPHA_STONE);
+    var goldAmt  = (task && task.reward && Number(task.reward.gold))  || roundTo10(skewedInt(100, 3000, SKEW_ALPHA_GOLD));
 
     if (typeof player !== 'undefined'){
       player.stone = (player.stone || 0) + stoneAmt;
@@ -149,8 +189,8 @@ function ensureSlot(){
     }
     if(!task || !task.done || task.claimed) return false;
 
-    // 發獎
-    grantTaskRewards();
+    // 發獎（用已決定的 reward）
+    grantTaskRewards(task);
 
     // 領取即移除，釋放上限空間
     state.tasks.splice(idx, 1);
@@ -246,9 +286,13 @@ function ensureSlot(){
     load();
     var html='';
 
-    // 頁首資訊
+    var nextDt = nextRotationDate();
+    var remain = nextDt - new Date();
+
+    // 頁首資訊（新增：下一輪更換時間與倒數）
     html += '<div style="margin-bottom:6px;color:#aaa">未領任務：<b>'+countPending()+'</b> / '+PENDING_CAP+'</div>';
     html += '<div style="margin-bottom:6px;color:#888;font-size:12px">輪換鍵：'+state.slotKey+'（每 6 小時檢查補任務；滿 '+PENDING_CAP+' 不再新增）</div>';
+    html += '<div style="margin-bottom:10px;color:#9aa;font-size:12px">下次輪換：<b>'+fmtDateTime(nextDt)+'</b>（倒數 '+msToHMS(remain)+'）</div>';
 
     // 列出所有任務（含已完成未領）
     for (var i=0;i<state.tasks.length;i++){
@@ -260,10 +304,15 @@ function ensureSlot(){
       var pct = it.target>0 ? Math.floor((cur/it.target)*100) : 0;
       var col = (it.type==='kills') ? '#2d7' : (it.type==='goldGain') ? '#c85' : '#48c';
 
+      // 顯示「完成獎勵」
+      var rStone = (it.reward && it.reward.stone) ? it.reward.stone : '?';
+      var rGold  = (it.reward && it.reward.gold)  ? it.reward.gold  : '?';
+
       html+='<div style="padding:8px 0;border-bottom:1px solid #444;">'+
               '<div style="font-weight:700">'+(it.name||it.uid)+'</div>'+
               bar(pct,col)+
-              '<div style="font-size:12px;color:#aaa;margin-top:4px;">進度：'+cur+' / '+it.target+'</div>';
+              '<div style="font-size:12px;color:#aaa;margin-top:4px;">進度：'+cur+' / '+it.target+'</div>'+
+              '<div style="font-size:12px;color:#bbb;margin-top:4px;">完成獎勵：強化石 ×'+rStone+'，金幣 ×'+rGold+'</div>';
       if (it.done && !it.claimed){
         html+='<div style="margin-top:6px;"><button data-claim="'+it.uid+'" style="padding:6px 10px;border:none;border-radius:6px;background:#2d7;color:#fff;">領取</button></div>';
       } else if (it.claimed){
@@ -307,6 +356,6 @@ function ensureSlot(){
   window.Daily_applyState = function (s) {
     if (!s || typeof s !== 'object') return;
     state = Object.assign({}, state, s);
-    ensureSlot(); save();
+    ensureSlot(); ensureTaskRewards(); save();
   };
 })();
