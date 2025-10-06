@@ -57,33 +57,34 @@
     ensureSlot();
   }
 
-  function ensureSlot(){
-    var curKey = sixHourKey();
-    if (state.slotKey !== curKey){
-      state.slotKey = curKey;
+function ensureSlot(){
+  var curKey = sixHourKey();
 
-      // 清掉已領取任務（保潔，理論上領取即移除了）
-      state.tasks = state.tasks.filter(function(t){ return !t.claimed; });
+  // 跨 6 小時輪換 → 重設 slot、清掉已領、依上限補任務、重置視窗內進度
+  if (state.slotKey !== curKey){
+    state.slotKey = curKey;
 
-      // 輪換時：若未領任務 < 上限，補任務
-      var pending = countPending();
-      if (pending < PENDING_CAP){
-        var add = Math.min(SLOT_ADD_PER_ROTATION, PENDING_CAP - pending);
-        appendNewTasks(add);
-      }
-      // 重置本輪完成計數（僅顯示用途）
-      state.finishedCountThisSlot = 0;
-      // 重置 6 小時視窗內的進度（讓每輪都重新計）
-      state.progress = { kills:0, goldGain:0, stoneGain:0 };
-      save();
-    } else {
-      // 若沒有任務（例如首次載入）也補一批
-      if (!Array.isArray(state.tasks) || state.tasks.length === 0){
-        appendNewTasks(Math.min(SLOT_ADD_PER_ROTATION, PENDING_CAP));
-        save();
-      }
+    // 清掉已領（保潔）
+    state.tasks = state.tasks.filter(function(t){ return !t.claimed; });
+
+    // 只在輪換時補任務
+    var pending = countPending();
+    if (pending < PENDING_CAP){
+      var add = Math.min(SLOT_ADD_PER_ROTATION, PENDING_CAP - pending);
+      appendNewTasks(add);
     }
+
+    state.finishedCountThisSlot = 0;
+    state.progress = { kills:0, goldGain:0, stoneGain:0 };
+    save();
+
+  } else {
+    // ✅ 同一個 slot：不再因為「任務清空」就自動補
+    // （保持空集合，等下一次輪換時再補）
+    // 如果你希望「首次啟動且完全沒有狀態」要補初始任務，
+    // 這在首次載入時 slotKey===""，已由上面的分支處理到。
   }
+}
 
   function countPending(){
     var n=0;
