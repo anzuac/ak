@@ -1,4 +1,4 @@
-// quest_daily_es5.js — V4.1（不相容舊版）：6 小時輪換、任務堆疊上限 10、獎勵預先決定、領取即移除、顯示下次輪換
+// quest_daily_es5.js — V4.2（不相容舊版）：6 小時輪換、任務堆疊上限 10、獎勵預先決定、領取即移除、顯示下次輪換＆即時倒數
 (function(){
   if (!window.QuestCore) return;
 
@@ -274,6 +274,18 @@
     scheduleRender();
   };
 
+  // ---- 每秒更新倒數時間（不重繪整個列表） ----
+  var countdownTimer = null;
+  function startCountdownTimer() {
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = setInterval(function(){
+      var nextDt = nextRotationDate();
+      var remain = nextDt - new Date();
+      var span = document.getElementById('dailyCountdown');
+      if (span) span.textContent = msToHMS(remain);
+    }, 1000);
+  }
+
   // —— UI —— 
   function bar(pct,color){
     return '<div style="height:8px;background:#333;border-radius:8px;overflow:hidden;margin-top:6px;">' +
@@ -292,7 +304,10 @@
     // 頁首資訊（新增：下一輪更換時間與倒數）
     html += '<div style="margin-bottom:6px;color:#aaa">未領任務：<b>'+countPending()+'</b> / '+PENDING_CAP+'</div>';
     html += '<div style="margin-bottom:6px;color:#888;font-size:12px">輪換鍵：'+state.slotKey+'（每 6 小時檢查補任務；滿 '+PENDING_CAP+' 不再新增）</div>';
-    html += '<div style="margin-bottom:10px;color:#9aa;font-size:12px">下次輪換：<b>'+fmtDateTime(nextDt)+'</b>（倒數 '+msToHMS(remain)+'）</div>';
+    html += '<div style="margin-bottom:10px;color:#9aa;font-size:12px">'
+          + '下次輪換：<b>'+fmtDateTime(nextDt)+'</b>'
+          + '（倒數 <span id="dailyCountdown">'+msToHMS(remain)+'</span>）'
+          + '</div>';
 
     // 列出所有任務（含已完成未領）
     for (var i=0;i<state.tasks.length;i++){
@@ -340,6 +355,9 @@
 
     // 若一開始就停在 daily 頁，立刻渲染
     try { if (typeof QuestCore!=='undefined' && QuestCore.getActiveTab && QuestCore.getActiveTab()==='daily') render(); } catch(e){}
+
+    // 啟動倒數更新
+    startCountdownTimer();
   }
   if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
 
