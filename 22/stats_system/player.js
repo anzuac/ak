@@ -116,9 +116,9 @@ get comboRate()
   statusEffects: {},
   currentHP: 0,
   currentMP: 0,
-  gold: 30000,
-  gem: 30000,
-  stone: 30000,
+  gold: 1000,
+  gem: 300,
+  stone: 300,
   spellDamageBonus: 0,
   attackSpeedPctBase: 1,
 
