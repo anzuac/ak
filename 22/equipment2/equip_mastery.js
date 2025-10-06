@@ -3,28 +3,27 @@
 
 (function () {
   // ===== 設定（1=100%）=====
+  // ⚠️ 統一使用 attackSpeedPct（和 player/coreBonus 對得上）
   const STAT_META = {
-    skillDamage: { name: "技能傷害", perLv: 0.002, max: 100 },
-    dodge:       { name: "閃避率",   perLv: 0.002, max: 100 },
-    critRate:    { name: "爆擊率",   perLv: 0.004, max: 100 },
-    critDamage:  { name: "爆擊傷害", perLv: 0.003, max: 100 },
+    skillDamage:   { name: "技能傷害", perLv: 0.002, max: 200 }, // 每級 +0.2%
+    dodge:         { name: "閃避率",   perLv: 0.002, max: 100 }, // 每級 +0.2%
+    critRate:      { name: "爆擊率",   perLv: 0.004, max: 100 }, // 每級 +0.4%
+    critDamage:    { name: "爆擊傷害", perLv: 0.003, max: 100 }, // 每級 +0.3%
+    attackSpeedPct:{ name: "攻擊速度", perLv: 0.003, max: 100 }, // 每級 +0.3%（100級=+30%）
   };
   const SAVE_KEY = "equipMasteryLevels_v1";
 
-  // 材料規則（依等級段不同用不同鑰匙；數量規則：低階每等+2把，初始2等於 L*2；中高階同概念）
-  const MATERIALS = {
-    low:  "低階潛能解放鑰匙",
-    mid:  "中階潛能解放鑰匙",
-    high: "高階潛能解放鑰匙",
-  };
+  // 材料規則
+  const MATERIALS = { low: "低階潛能解放鑰匙", mid: "中階潛能解放鑰匙", high: "高階潛能解放鑰匙" };
   function needForLevel(L) {
     if (L <= 50) return { item: MATERIALS.low,  need: 2 * L };
-    if (L <= 80) return { item: MATERIALS.mid,  need: 2 * (L - 50) + 2 }; // 51→2, 52→4 ...（等差2）
-    return { item: MATERIALS.high, need: 2 * (L - 80) + 2 };              // 81→2, 82→4 ...
+    if (L <= 80) return { item: MATERIALS.mid,  need: 2 * (L - 50) + 2 };
+    return { item: MATERIALS.high, need: 2 * (L - 80) + 2 };
   }
 
   // ===== 狀態 =====
-  const levels = { skillDamage: 0, dodge: 0, critRate: 0, critDamage: 0 };
+  // ⚠️ 這裡也統一 key：attackSpeedPct
+  const levels = { skillDamage: 0, dodge: 0, critRate: 0, critDamage: 0, attackSpeedPct: 0 };
 
   // ===== 工具 =====
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
@@ -33,14 +32,12 @@
   const n = (v) => (typeof v === "number" && isFinite(v)) ? v : 0;
 
   function getInvCount(itemName) {
-    // 你專案的背包 API：若沒接到就當 0
     if (typeof window.getItemQuantity === "function") return window.getItemQuantity(itemName) || 0;
     return 0;
   }
   function spend(itemName, amount) {
     if (amount <= 0) return true;
     if (typeof window.removeItem === "function") { window.removeItem(itemName, amount); return true; }
-    // 若沒接到移除 API，為避免卡死，提示後中止
     alert("尚未接上背包扣除 API（removeItem）。");
     return false;
   }
@@ -56,7 +53,7 @@
     } catch (e) {}
   }
 
-  // ===== 寫入 coreBonus（關鍵：一次到位）=====
+  // ===== 寫入 coreBonus（關鍵）=====
   function ensureCore() {
     if (!window.player) window.player = {};
     if (!player.coreBonus) player.coreBonus = {};
@@ -67,10 +64,11 @@
     ensureCore();
     const bag = player.coreBonus.bonusData;
     bag.myEquipMastery = {
-      skillDamage:    n(levels.skillDamage) * STAT_META.skillDamage.perLv,
-      dodgePercent:   n(levels.dodge)       * STAT_META.dodge.perLv,
-      critRate:       n(levels.critRate)    * STAT_META.critRate.perLv,
-      critMultiplier: n(levels.critDamage)  * STAT_META.critDamage.perLv,
+      skillDamage:    n(levels.skillDamage)   * STAT_META.skillDamage.perLv,
+      dodgePercent:   n(levels.dodge)         * STAT_META.dodge.perLv,
+      critRate:       n(levels.critRate)      * STAT_META.critRate.perLv,
+      critMultiplier: n(levels.critDamage)    * STAT_META.critDamage.perLv,
+      attackSpeedPct: n(levels.attackSpeedPct)* STAT_META.attackSpeedPct.perLv, // ★ 這行才會讓攻速真正生效
     };
     if (typeof window.updateAllUI === "function") updateAllUI();
     if (typeof window.updateResourceUI === "function") updateResourceUI();
@@ -91,10 +89,10 @@
     levels[key] = clamp(L, 0, meta.max);
     saveLevels();
     applyToCoreBonus();
-    renderPanel(); // UI 立即刷新
+    renderPanel();
   }
 
-  // ===== UI（固定彈窗，不會跑到主頁底部）=====
+  // ===== UI =====
   function ensureStyles() {
     if (document.getElementById("equipMasteryStyles")) return;
     const s = document.createElement("style");
@@ -104,7 +102,7 @@
       .em-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
       .em-modal {
         position: absolute; left: 50%; top: 10vh; transform: translateX(-50%);
-        width: 270px; max-height: 55vh; overflow: auto;
+        width: 370px; max-height: 65vh; overflow: auto;
         background: #222; color: #fff; border: 1px solid #555; border-radius: 10px;
         box-shadow: 0 14px 36px rgba(0,0,0,.45);
       }
@@ -167,6 +165,7 @@
       ${cardHTML("dodge")}
       ${cardHTML("critRate")}
       ${cardHTML("critDamage")}
+      ${cardHTML("attackSpeedPct")}  <!-- ★ 新增攻擊速度卡 -->
     `;
   }
 
@@ -180,7 +179,7 @@
     wrap.innerHTML = `
       <div class="em-backdrop" onclick="equipMastery.close()"></div>
       <div class="em-modal">
-        <div class="em-header">🔧 裝備整匯</div>
+        <div class="em-header">🔧 被動能力</div>
         <div class="em-body"></div>
         <div class="em-footer"><button class="em-close" onclick="equipMastery.close()">關閉</button></div>
       </div>
@@ -197,7 +196,7 @@
     if (el) el.remove();
   }
 
-  // ===== 對外 API（固定名稱）=====
+  // ===== 對外 API =====
   window.equipMastery = {
     open: openPanel,
     close: closePanel,
@@ -206,7 +205,7 @@
     levels
   };
 
-  // ===== 主頁按鈕綁定（如果存在就自動綁）=====
+  // ===== 主頁按鈕綁定 =====
   document.addEventListener("DOMContentLoaded", () => {
     loadLevels();
     applyToCoreBonus();

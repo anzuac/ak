@@ -171,7 +171,7 @@ function openElementEquipmentPanel() {
     modal.id = "element-equipment-modal";
     modal.style.cssText = `
       position: fixed; top: 10vh; left: 50%; transform: translateX(-50%);
-      width: 55vw; max-width: 250px; max-height: 50vh; background: #222;
+      width: 65vw; max-width: 420px; max-height: 70vh; background: #222;
       border: 1px solid #888; border-radius: 6px; padding: 10px; z-index: 1000;
       display: flex; flex-direction: column; overflow: hidden; color: #fff;
     `;
