@@ -229,6 +229,7 @@ function updateResourceUI() {
 
   // 其他欄位
   G("recover", `${(player.totalStats.recoverPercent * 100).toFixed(1)}%`);
+  G("attackSpeed", (player.totalStats.attackSpeedPct * 100).toFixed(2) + "%");
   G("dodge",   `${(player.totalStats.dodgePercent   * 100).toFixed(1)}%`);
   G("player-level", player.level);
   G("player-exp", `${player.exp} / ${player.expToNext}`);

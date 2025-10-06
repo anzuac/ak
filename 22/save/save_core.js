@@ -1,181 +1,178 @@
 // ==========================
-// save_core.js
-// 專門用於儲存和載入遊戲主要資料的模組
+// save_core.js  (with facade hook)
 // ==========================
 
-// =====================
-// 全域設定
-// =====================
-window.DEBUG_MODE = false; // 測試時 true, 上線時改 false
+(() => {
+  const NS = "GAME_SAVE_V2";
+  const MANIFEST_KEY = `${NS}:manifest`;
+  const SLOT_A = `${NS}:slotA`;
+  const SLOT_B = `${NS}:slotB`;
+  const OLD_SINGLE_KEY = `${NS}`;
+  const LOCK_KEY = `${NS}:lock`;
 
+  const SCHEMA_VERSION = 2;
+  const SAVE_MIN_INTERVAL_MS = 1500;
+  const FLUSH_TIMEOUT_MS = 3000;
+  const LOCK_TTL_MS = 3500;
 
-const GAME_SAVE_KEY = 'GAME_SAVE_V2';
+  let savePending = false;
+  let lastSaveAt = 0;
+  let flushTimer = null;
 
-//console.log("Save Core 模組已載入。");
-
-/**
- * 將 player 物件的資料儲存到 Local Storage
- */
-function saveGame() {
-    console.log("正在嘗試儲存遊戲資料...");
-    if (typeof player === 'undefined' || !player) {
-        console.error("無法儲存：player 物件不存在。");
-        return;
+  function now() { return Date.now(); }
+  function checksum(str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
     }
+    return ("00000000" + h.toString(16)).slice(-8);
+  }
+  function readJSON(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
+  function writeText(key, text) { localStorage.setItem(key, text); }
+  function readManifest() { return readJSON(MANIFEST_KEY) || null; }
+  function writeManifest(m) { writeText(MANIFEST_KEY, JSON.stringify(m)); }
 
-    const jobChangeDoneLevelsArray = Array.from(window.__jobChangeDoneLevels || new Set());
+  function tryLock() {
+    const nowTs = now();
+    const prev = Number(localStorage.getItem(LOCK_KEY));
+    if (Number.isFinite(prev) && (nowTs - prev) < LOCK_TTL_MS) return false;
+    localStorage.setItem(LOCK_KEY, String(nowTs));
+    return true;
+  }
+  function releaseLock() { localStorage.removeItem(LOCK_KEY); }
 
-    const savableState = {
-        nickname: player.nickname,
-        job: player.job,
-        level: player.level,
-        exp: player.exp,
-        statPoints: player.statPoints,
-        gold: player.gold,
-        gem: player.gem,
-        stone: player.stone,
-        
-        baseStats: {
-            hp: player.baseStats.hp,
-            atk: player.baseStats.atk,
-            def: player.baseStats.def,
-            mp: player.baseStats.mp,
-            str: player.baseStats.str,
-            agi: player.baseStats.agi,
-            int: player.baseStats.int,
-            luk: player.baseStats.luk,
-        },
-        
-        magicShieldEnabled: player.magicShieldEnabled,
-        baseSkillDamage: player.baseSkillDamage,
-        coreBonusData: player.coreBonus?.bonusData,
-        elementEquipmentData: window.getElementGearData ? window.getElementGearData() : null,
-        inventoryData: window.inventory || {},
-        skillsState: window.Skills_exportState ? window.Skills_exportState() : null,
-
-        jobChangeDoneLevels: jobChangeDoneLevelsArray,
-
-        recoveryLevel:
-          (player?.recoverySystem?.level
-            ?? (typeof recoverySystem !== 'undefined' ? recoverySystem?.level : undefined)
-            ?? 1),
+  // === 存檔資料 ===
+  function buildSaveState() {
+    if (typeof player === 'undefined' || !player) return null;
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      savedAt: now(),
+      nickname: player.nickname ?? "",
+      job: player.job ?? "",
+      level: Number(player.level) || 1,
+      exp: Number(player.exp) || 0,
+      statPoints: Number(player.statPoints) || 0,
+      gold: Number(player.gold) || 0,
+      gem: Number(player.gem) || 0,
+      stone: Number(player.stone) || 0,
+      baseStats: {
+        hp: Number(player.baseStats?.hp) || 100,
+        atk: Number(player.baseStats?.atk) || 10,
+        def: Number(player.baseStats?.def) || 5,
+        mp: Number(player.baseStats?.mp) || 0,
+        str: Number(player.baseStats?.str) || 0,
+        agi: Number(player.baseStats?.agi) || 0,
+        int: Number(player.baseStats?.int) || 0,
+        luk: Number(player.baseStats?.luk) || 0,
+      },
+      magicShieldEnabled: !!player.magicShieldEnabled,
+      baseSkillDamage: Number(player.baseSkillDamage ?? 0.10),
+      coreBonusData: player.coreBonus?.bonusData ?? null,
+      elementEquipmentData: (typeof window.getElementGearData === 'function') ? window.getElementGearData() : (window.elementGearData ?? null),
+      inventoryData: window.inventory || {},
+      skillsState: (typeof window.Skills_exportState === 'function') ? window.Skills_exportState() : null,
+      jobChangeDoneLevels: Array.from(window.__jobChangeDoneLevels || new Set()),
+      recoveryLevel: (player?.recoverySystem?.level ?? 1),
     };
+  }
 
-    try {
-        localStorage.setItem(GAME_SAVE_KEY, JSON.stringify(savableState));
-        console.log("✅ 遊戲資料已成功儲存！");
-    } catch (e) {
-        console.error("❌ 遊戲儲存失敗:", e);
+  function migrate(data) {
+    if (!data || typeof data !== 'object') return null;
+    const v = Number(data.schemaVersion) || 1;
+    if (v < 2) {
+      if (typeof data.recoveryLevel !== 'number') data.recoveryLevel = 1;
+      if (typeof data.baseSkillDamage !== 'number') data.baseSkillDamage = 0.10;
+      data.schemaVersion = 2;
     }
-}
+    return data;
+  }
 
-/**
- * 從 Local Storage 載入資料，並應用到 player 物件
- * @returns {boolean} 如果成功載入則回傳 true，否則 false
- */
-function loadGame() {
-    console.log("正在嘗試載入遊戲資料...");
-    try {
-        const rawData = localStorage.getItem(GAME_SAVE_KEY);
-        if (!rawData) {
-            console.log("沒有找到遊戲存檔。");
-            return false;
-        }
+  function applyLoadedState(loadedData) {
+    player.nickname = loadedData.nickname ?? player.nickname ?? "";
+    player.job      = loadedData.job ?? player.job ?? "";
+    player.level    = Number(loadedData.level) || 1;
+    player.exp      = Number(loadedData.exp) || 0;
+    player.statPoints = Number(loadedData.statPoints) || 0;
+    player.gold     = Number(loadedData.gold) || 0;
+    player.gem      = Number(loadedData.gem) || 0;
+    player.stone    = Number(loadedData.stone) || 0;
+    player.magicShieldEnabled = !!loadedData.magicShieldEnabled;
+    player.baseSkillDamage = Number(loadedData.baseSkillDamage ?? 0.10);
 
-        const loadedData = JSON.parse(rawData);
-        if (!loadedData || typeof loadedData !== 'object') {
-            console.error("載入的資料格式不正確。");
-            return false;
-        }
+    if (loadedData.baseStats) Object.assign(player.baseStats, loadedData.baseStats);
+    if (loadedData.coreBonusData && player.coreBonus?.bonusData) Object.assign(player.coreBonus.bonusData, loadedData.coreBonusData);
+    if (loadedData.inventoryData && window.inventory) Object.assign(window.inventory, loadedData.inventoryData);
+    if (loadedData.skillsState && typeof window.Skills_applyState === 'function') window.Skills_applyState(loadedData.skillsState);
+    window.__jobChangeDoneLevels = new Set(loadedData.jobChangeDoneLevels || []);
+    player.recoverySystem = player.recoverySystem || {};
+    player.recoverySystem.level = Number(loadedData.recoveryLevel) || 1;
 
-        player.nickname = loadedData.nickname ?? "";
-        player.job = loadedData.job ?? "";
-        player.level = parseInt(loadedData.level) || 1;
-        player.exp = parseInt(loadedData.exp) || 0;
-        player.statPoints = parseInt(loadedData.statPoints) || 0;
-        player.gold = parseInt(loadedData.gold) || 0;
-        player.gem = parseInt(loadedData.gem) || 0;
-        player.stone = parseInt(loadedData.stone) || 0;
-        player.magicShieldEnabled = loadedData.magicShieldEnabled ?? false;
-        player.baseSkillDamage = loadedData.baseSkillDamage ?? 0.10;
-
-        if (loadedData.baseStats) {
-            Object.assign(player.baseStats, loadedData.baseStats);
-        }
-        
-        if (loadedData.coreBonusData && player.coreBonus?.bonusData) {
-            Object.assign(player.coreBonus.bonusData, loadedData.coreBonusData);
-        }
-        if (player.skillBonus?.bonusData) {
-            player.skillBonus.bonusData = {};
-        }
-
-        if (loadedData.inventoryData && window.inventory) {
-            Object.assign(window.inventory, loadedData.inventoryData);
-        }
-
-        if (loadedData.skillsState && window.Skills_applyState) {
-            window.Skills_applyState(loadedData.skillsState);
-        }
-
-        // ✅ 載入轉職紀錄，並將陣列轉換為 Set
-        if (Array.isArray(loadedData.jobChangeDoneLevels)) {
-            window.__jobChangeDoneLevels = new Set(loadedData.jobChangeDoneLevels);
-        } else {
-            window.__jobChangeDoneLevels = new Set();
-        }
-
-        // ✅ 以 player 為主儲放恢復系統等級
-        player.recoverySystem = player.recoverySystem || {};
-        player.recoverySystem.level = loadedData.recoveryLevel || 1;
-
-        // ✅ 同步到執行中的 recoverySystem（若模組已載入）
-        if (typeof syncRecoveryFromPlayer === 'function') {
-            syncRecoveryFromPlayer();
-        }
-
-        // 🏆 修正：載入裝備資料後，重新套用裝備效果
-        if (loadedData.elementEquipmentData && window.elementGearData) {
-            Object.assign(window.elementGearData, loadedData.elementEquipmentData);
-            // 確保在載入裝備數據後立即重新應用它們的加成
-            if (typeof applyElementEquipmentBonusToPlayer === 'function') {
-                applyElementEquipmentBonusToPlayer();
-            }
-        }
-        
-        // 🏆 修正：重新計算總屬性
-        // 這行現在放在更合適的位置，確保在裝備加成後執行
-        if (typeof recomputeTotalStats === 'function') recomputeTotalStats();
-
-        player.currentHP = player.totalStats.hp;
-        player.currentMP = player.totalStats.mp;
-        player.shield = 0;
-        player.statusEffects = {};
-        player.abnormalInflict = {};
-        player.recoverPercent = 0;
-        player.damageReduce = 0;
-        
-        console.log("✅ 遊戲資料已成功載入！");
-        player.expToNext = getExpToNext(player.level);
-        
-        if (typeof rebuildActiveSkills === 'function') rebuildActiveSkills();
-        if (typeof updateAllUI === 'function') updateAllUI();
-        
-        return true;
-    } catch (e) {
-        console.error("❌ 遊戲載入失敗:", e);
-        localStorage.removeItem(GAME_SAVE_KEY);
-        console.log("已清除損壞的存檔。");
+    if (loadedData.elementEquipmentData) {
+      if (window.elementGearData) Object.assign(window.elementGearData, loadedData.elementEquipmentData);
+      if (typeof window.applyElementEquipmentBonusToPlayer === 'function') window.applyElementEquipmentBonusToPlayer();
     }
+
+    if (typeof window.recomputeTotalStats === 'function') window.recomputeTotalStats();
+    player.currentHP = player.totalStats?.hp ?? 100;
+    player.currentMP = player.totalStats?.mp ?? 0;
+    player.shield = 0;
+    player.statusEffects = {};
+    player.expToNext = (typeof window.getExpToNext === 'function') ? window.getExpToNext(player.level) : 100;
+
+    if (typeof window.rebuildActiveSkills === 'function') window.rebuildActiveSkills();
+    if (typeof window.updateAllUI === 'function') window.updateAllUI();
+
+    // ✅ 通知 facade：已套用存檔
+    if (typeof window.GameSave__notifyApplied === 'function') {
+      window.GameSave__notifyApplied();
+    }
+  }
+
+  // === 原子寫入 / 載入 ===
+  function writeAtomic(json) {
+    const len = json.length, sum = checksum(json);
+    const manifest = readManifest() || { active: "slotA" };
+    const target = manifest.active === "slotA" ? SLOT_B : SLOT_A;
+    writeText(target, json);
+    writeManifest({ schemaVersion: SCHEMA_VERSION, active: (target===SLOT_A?"slotA":"slotB"), savedAt: now(), size: len, checksum: sum });
+  }
+  function loadFromSlots() {
+    const manifest = readManifest();
+    const activeKey = (manifest?.active==="slotB")?SLOT_B:SLOT_A;
+    const raw = localStorage.getItem(activeKey);
+    if (raw) { try { return migrate(JSON.parse(raw)); } catch {} }
+    return null;
+  }
+
+  function saveGameNow() {
+    const release = tryLock();
+    try {
+      const state = buildSaveState(); if (!state) return;
+      writeAtomic(JSON.stringify(state));
+      lastSaveAt = now(); savePending = false;
+    } catch (e) { console.error("❌ Save failed:", e); }
+    finally { if (release) releaseLock(); }
+  }
+  function scheduleSave() {
+    savePending = true;
+    const elapsed = now()-lastSaveAt;
+    if (elapsed >= SAVE_MIN_INTERVAL_MS) { clearTimeout(flushTimer); flushTimer=null; saveGameNow(); }
+    else if (!flushTimer) {
+      flushTimer=setTimeout(()=>{ flushTimer=null; if(savePending) saveGameNow(); }, Math.min(SAVE_MIN_INTERVAL_MS-elapsed, FLUSH_TIMEOUT_MS));
+    }
+  }
+
+  function saveGame(){ scheduleSave(); }
+  function loadGame() {
+    const data = loadFromSlots();
+    if (data) { applyLoadedState(data); return true; }
     return false;
-}
+  }
 
-window.saveGame = saveGame;
-window.loadGame = loadGame;
+  window.addEventListener("beforeunload", ()=>{ if (savePending) saveGameNow(); });
+  document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="hidden"&&savePending) saveGameNow(); });
 
-document.addEventListener('DOMContentLoaded', () => {
-    const hasSave = localStorage.getItem(GAME_SAVE_KEY) !== null;
-    if (hasSave) {
-        console.log("已偵測到遊戲存檔，準備跳過設定角色畫面。");
-    }
-});
+  window.saveGame=saveGame;
+  window.loadGame=loadGame;
+})();

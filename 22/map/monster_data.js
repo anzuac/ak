@@ -4,7 +4,7 @@ const GLOBAL_DROP_RATES = {
   s2: { name: "進階石", rate: 0.02 },
   s3: { name: "星之碎片", rate: 0.02 },
   star: { name: "衝星石", rate: 0.02 },
-  shard: { name: "元素碎片", rate: 0.03 }
+  shard: { name: "元素碎片", rate: 0.05 }
 };
 // ✅ 完整 monster_config.js 整合後版本
 

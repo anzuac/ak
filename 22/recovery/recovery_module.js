@@ -62,7 +62,7 @@ function initRecoverySystem() {
   
   recoverySystem = {
     level: Math.min(20, Math.max(1, prevLevel)),
-    maxLevel: 20,
+    maxLevel: 10,
     
     // 每 5 秒的固定恢復（不分職業）
     get hpFlatPer5s() {

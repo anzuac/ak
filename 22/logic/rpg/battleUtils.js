@@ -1,55 +1,119 @@
-// 📦 battleUtils.js (戰鬥工具與 UI 顯示)
+// 📦 battleUtils.js —— 遇敵/復活倒數 + UI + Gate（統一閘門）
 
-// === 安全墊片：避免未定義報錯（王技可直接呼叫）=''
-if (typeof window.applyPlayerStatus === 'undefined') {
-  window.applyPlayerStatus = function(type, turns) {
-    if (!type || !Number.isFinite(turns)) return;
-    player.statusEffects = player.statusEffects || {};
-    const cur = player.statusEffects[type] || 0;
-    player.statusEffects[type] = Math.max(cur, Math.max(0, Math.floor(turns)));
+// ===== 戰鬥日誌（保底）=====
+if (typeof window.logPrepend !== "function") {
+  window.logPrepend = function (text) {
+    var log = document.getElementById("battleLog");
+    if (!log) return;
+    var entry = document.createElement("div");
+    entry.textContent = text;
+    log.insertBefore(entry, log.firstChild);
   };
 }
 
-// ===== 小工具：戰鬥日誌 =====
-function logPrepend(text) {
-  const log = document.getElementById("battleLog");
-  if (!log) return;
-  const entry = document.createElement("div");
-  entry.textContent = text;
-  log.insertBefore(entry, log.firstChild);
+// ===== UI：怪物面板倒數 =====
+if (typeof window.showRespawnCountdownUI !== "function") {
+  window.showRespawnCountdownUI = function (sec) {
+    var box = document.getElementById("monsterInfo");
+    if (!box) return;
+    box.innerHTML =
+      '<div style="padding:10px 8px; border:1px dashed #666; border-radius:8px; text-align:center;">' +
+      '<div style="font-size:14px; margin-bottom:6px;">🧭 即將遭遇新怪</div>' +
+      '<div style="font-size:24px; font-weight:bold;">' + sec + '</div>' +
+      '<div style="font-size:12px; opacity:.8; margin-top:6px;">請稍候…</div>' +
+      '</div>';
+  };
+}
+if (typeof window.clearMonsterInfo !== "function") {
+  window.clearMonsterInfo = function () {
+    var box = document.getElementById("monsterInfo");
+    if (box) box.textContent = "尚未遭遇怪物";
+  };
 }
 
-// ===== UI：遇敵倒數（不刷日誌）=====
-function showRespawnCountdownUI(sec) {
-  const box = document.getElementById("monsterInfo");
-  if (!box) return;
-  box.innerHTML = `
-    <div style="padding:10px 8px; border:1px dashed #666; border-radius:8px; text-align:center;">
-      <div style="font-size:14px; margin-bottom:6px;">🧭 即將遭遇新怪</div>
-      <div style="font-size:24px; font-weight:bold;">${sec}</div>
-      <div style="font-size:12px; opacity:.8; margin-top:6px;">請稍候…</div>
-    </div>
-  `;
+// ===== UI：HP 列倒數 =====
+if (typeof window.showDeathCountdownUI !== "function") {
+  window.showDeathCountdownUI = function (sec) {
+    var hpEl = document.getElementById("hp");
+    if (!hpEl) return;
+    var maxHp = (window.player && window.player.totalStats && window.player.totalStats.hp) ? window.player.totalStats.hp : 0;
+    hpEl.textContent = '0 / ' + maxHp + '（復活倒數 ' + sec + 's）';
+    var abilitySection = hpEl.closest && hpEl.closest(".section");
+    if (abilitySection) abilitySection.style.opacity = 0.6;
+  };
 }
-function clearMonsterInfo() {
-  const box = document.getElementById("monsterInfo");
-  if (box) box.textContent = "尚未遭遇怪物";
+if (typeof window.restoreAbilityUI !== "function") {
+  window.restoreAbilityUI = function () {
+    var hpEl = document.getElementById("hp");
+    if (!hpEl) return;
+    var maxHp = (window.player && window.player.totalStats && window.player.totalStats.hp) ? window.player.totalStats.hp : 0;
+    var curHp = (window.player && typeof window.player.currentHP === "number") ? window.player.currentHP : 0;
+    hpEl.textContent = curHp + ' / ' + maxHp;
+    var abilitySection = hpEl.closest && hpEl.closest(".section");
+    if (abilitySection) abilitySection.style.opacity = "";
+  };
 }
-function startRespawnCountdown(delaySec = 3) {
-  if (respawnTimer) clearInterval(respawnTimer);
-  let t = Math.max(0, Number(delaySec) || 0);
-  showRespawnCountdownUI(t);
-  respawnTimer = setInterval(() => {
+
+// ===== 全域 timer（單例）=====
+if (typeof window.respawnTimer === "undefined") window.respawnTimer = null;
+if (typeof window.deathTimer   === "undefined") window.deathTimer   = null;
+
+// ===== Gate（統一閘門）=====
+(function () {
+  if (window.BattleGate) return;
+  window.BattleGate = {
+    _manualLock: false,
+    lock:   function() { this._manualLock = true;  },
+    unlock: function() { this._manualLock = false; },
+
+    isLocked: function () {
+      return !!this._manualLock || !!window.respawnTimer || !!window.deathTimer;
+    },
+    canAutoSpawn: function () {
+      return !this.isLocked() && !!window.autoEnabled && !window.isDead && !window.currentMonster;
+    },
+    requestAutoSpawn: function () {
+      if (this.canAutoSpawn() && typeof window.spawnNewMonster === "function") {
+        window.spawnNewMonster();
+        return true;
+      }
+      return false;
+    }
+  };
+})();
+
+// ===== 遇敵倒數（唯一中控）=====
+window.RESPAWN_DELAY_SEC = window.RESPAWN_DELAY_SEC || 2; // 全域預設可改
+
+window.startRespawnCountdown = function (delaySec) {
+  if (window.respawnTimer) return;     // 單例：已在倒數中就不重啟
+  BattleGate.lock();                    // 倒數期間鎖住戰鬥
+
+  var t = Number(delaySec);
+  if (!isFinite(t)) t = Number(window.RESPAWN_DELAY_SEC);
+  if (!isFinite(t)) t = 3;
+  t = Math.max(0, Math.floor(t));
+
+  if (typeof window.showRespawnCountdownUI === "function") window.showRespawnCountdownUI(t);
+
+  window.respawnTimer = setInterval(function () {
     t--;
     if (t <= 0) {
-      clearInterval(respawnTimer);
-      respawnTimer = null;
-      if (typeof spawnNewMonster === "function") spawnNewMonster();
+      clearInterval(window.respawnTimer);
+      window.respawnTimer = null;
+      if (typeof window.spawnNewMonster === "function") window.spawnNewMonster();
+      BattleGate.unlock();             // 遇敵後解鎖
     } else {
-      showRespawnCountdownUI(t);
+      if (typeof window.showRespawnCountdownUI === "function") window.showRespawnCountdownUI(t);
     }
   }, 1000);
-}
+};
+
+window.cancelRespawnCountdown = function () {
+  if (window.respawnTimer) { clearInterval(window.respawnTimer); window.respawnTimer = null; }
+  BattleGate.unlock();
+};
+
 // ===== 玩家死亡 → 啟動倒數復活（30s）=====
 function startDeathCountdown() {
   if (isDead) return;              // 避免重複觸發
@@ -67,7 +131,7 @@ function startDeathCountdown() {
   window.setDifficultySelectDisabled?.(false);
 
   // 顯示 30 秒復活倒數在 HP 行
-  let countdown = 30; // 這裡要幾秒就改這個
+  let countdown = 10; // 這裡要幾秒就改這個
   showDeathCountdownUI(countdown);
 
   // 關閉舊倒數，開新倒數

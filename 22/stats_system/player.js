@@ -23,7 +23,7 @@ const player = {
   level: 1,
   exp: 0,
   expToNext: 0,
-  baseStats: { hp: 500, atk: 50, def: 20, mp: 100, str: 0, agi: 0, int: 0, luk: 0 },
+  baseStats: { hp: 500, atk: 10, def: 10, mp: 100, str: 0, agi: 0, int: 0, luk: 0 },
   statPoints: 10,
   magicShieldEnabled: false,
   baseSkillDamage: 0.10,
@@ -49,7 +49,11 @@ coreBonus: (() => {
     get int() { return calc("int"); },
     get luk() { return calc("luk"); },
     get skillDamage() { return calc("skillDamage"); },
-    
+    // 在 player.coreBonus 的回傳物件中加：
+    get attackSpeedPct() { return calc("attackSpeedPct"); },
+    //連擊
+get doubleHitChance() { return calc("doubleHitChance"); },
+get comboRate()       { return calc("comboRate"); },
     // 掉落類
     get expBonus() { return calc("expBonus"); },
     get dropBonus() { return calc("dropBonus"); },
@@ -84,7 +88,12 @@ coreBonus: (() => {
       get damageReduce()   { return calc("damageReduce"); },
       get spellDamage()    { return calc("spellDamage"); },
       get skillDamage()    { return calc("skillDamage"); },
-
+      // 在 player.skillBonus 的回傳物件中加：
+      get attackSpeedPct() { return calc("attackSpeedPct"); },
+      //連擊
+      get doubleHitChance() { return calc("doubleHitChance"); },
+get comboRate()      
+{ return calc("comboRate"); },
       // 🆕 新增：在 skillBonus 中加入 exp/drop/gold 加成
       get expBonus() { return calc("expBonus"); },
       get dropBonus() { return calc("dropBonus"); },
@@ -107,11 +116,11 @@ coreBonus: (() => {
   statusEffects: {},
   currentHP: 0,
   currentMP: 0,
-  gold: 0,
-  gem: 0,
-  stone: 0,
+  gold: 30000,
+  gem: 30000,
+  stone: 30000,
   spellDamageBonus: 0,
-
+  attackSpeedPctBase: 1,
 
 
   // 修正：總加成來自核心(clover)和技能(aura)的總和
@@ -210,7 +219,7 @@ let finalCritRate = Math.min(1, finalCritRateRaw);
   
   // 盜賊連擊率（每 100 LUK = +1%，最多 40%）
   const thiefDoubleHit = (baseJob === "thief") // ★ 用 baseJob
-    ? Math.min(0.99, totalLuk * 0.0001)
+    ? Math.min(0.4, totalLuk * 0.0001)
     : 0;
 
   // 劍士特性：力量轉換減傷率（每 100 STR = +1%，最多 30%）
@@ -239,14 +248,33 @@ let finalCritRate = Math.min(1, finalCritRateRaw);
 
     critRate:       Math.max(0, Math.min(1, finalCritRate)),
     critMultiplier: (Number(this.critMultiplier) || 0) + (Number(this.skillBonus.critMultiplier) || 0) + (Number(this.coreBonus.critMultiplier) || 0) + critMulBonus,
+     
+     attackSpeedPct: (
+  (Number(this.attackSpeedPctBase) || 0) +
+  (Number(this.coreBonus.attackSpeedPct) || 0) +
+  (Number(this.skillBonus.attackSpeedPct) || 0)
+),
+
 
     damageReduce:   finalDamageReduce,
     spellDamage:    (Number(this.spellDamageBonus)||0) + (Number(this.skillBonus.spellDamage) || 0),
     skillDamage:     totalSkillDamage,
 
-    // 盜賊連擊
-    comboRate:        (Number(this.comboRate)        || 0) + thiefDoubleHit,
-    doubleHitChance:  (Number(this.doubleHitChance)  || 0) + thiefDoubleHit,
+
+
+comboRate: (
+  (Number(this.comboRate) || 0) +
+  (Number(this.coreBonus.comboRate) || 0) +
+  (Number(this.skillBonus.comboRate) || 0) +
+  thiefDoubleHit
+),
+
+doubleHitChance: (
+  (Number(this.doubleHitChance) || 0) +
+  (Number(this.coreBonus.doubleHitChance) || 0) +
+  (Number(this.skillBonus.doubleHitChance) || 0) +
+  thiefDoubleHit
+),
   };
 }
 };
@@ -262,7 +290,7 @@ function getMagicShieldPercent() {
   if (!isMage || !player.magicShieldEnabled) return 0;
 
   const maxPct = 0.7;
-  const capInt = 6000;
+  const capInt = 4000;
   const alpha  = 0.6;
 
   const totalInt = (player.baseStats.int || 0) + (player.coreBonus.int || 0);
@@ -274,13 +302,13 @@ window.getMagicShieldPercent = getMagicShieldPercent;
 
 function getExpToNext(level) {
   if (level >= MAX_LEVEL) return 1;
-  let exp = 100;
+  let exp = 30;
   for (let i = 1; i < level; i++) {
-    if (i <= 10) exp *= 1.5;
-    else if (i <= 30) exp *= 1.25;
-    else if (i <= 50) exp *= 1.20;
-    else if (i <= 70) exp *= 1.15;
-    else exp *= 1.1;
+    if (i <= 10) exp *= 1.35;
+    else if (i <= 30) exp *= 1.2;
+    else if (i <= 50) exp *= 1.13;
+    else if (i <= 70) exp *= 1.1;
+    else exp *= 1.05;
   }
   return Math.round(exp);
 }
@@ -459,3 +487,6 @@ function initPlayer() {
   if (typeof updateResourceUI === "function") updateResourceUI?.();
   if (typeof ensureSkillEvolution === "function") ensureSkillEvolution?.();
 }
+
+// 在 player.js 的最末尾加入這行
+window.player = player;

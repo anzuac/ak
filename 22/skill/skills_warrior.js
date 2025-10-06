@@ -191,8 +191,8 @@ registerJobSkill('warrior2', {
     return `${hits} 段重擊，每擊約 ${perP}%（總計約 ${totP}%）｜STR加成上限+100%｜進化等級：${this.evolveLevels.join("/")}`;
   }
 });
-registerJobSkill('warrior', {
-  job: "warrior",
+registerJobSkill('warrior3', {
+  job: "warrior3",
   id: "god_blade_rend",
   name: "鬥神裂空斬(三轉)",
   type: "attack",
@@ -239,8 +239,8 @@ registerJobSkill('warrior', {
   }
 });
 // === 四轉：瞬刃快斬（爆發技 / 無進化 / CD 120s / STR上限+200%）===
-registerJobSkill('warrior', {
-  job: "warrior",
+registerJobSkill('warrior4', {
+  job: "warrior4",
   id: "blade_flash",
   name: "瞬刃快斬(四轉)",
   type: "attack",
@@ -299,8 +299,8 @@ registerJobSkill('warrior', {
     return `爆發技｜${hits} 連擊，每擊約 ${per}%（總計約 ${total}%）｜STR加成上限+200%｜CD ${this.cooldown}s`;
   }
 });
-registerJobSkill('warrior', {
-  job: "warrior",
+registerJobSkill('warrior4', {
+  job: "warrior4",
   id: "warlord_rapid_assault",
   name: "戰神迅襲(四轉)",
   type: "attack",

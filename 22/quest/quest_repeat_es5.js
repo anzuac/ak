@@ -6,8 +6,8 @@
 
   // 門檻設定
   var THRESH = {
-    goldGain:     1000000,  // 楓幣每獲得 10 萬 → 鑽石×2
-    stoneGain:    20000,   // 強化石每獲得 1 萬 → 鑽石×1
+    goldGain:     2000000,  // 楓幣每獲得 10 萬 → 鑽石×2
+    stoneGain:    40000,   // 強化石每獲得 1 萬 → 鑽石×1
     diamondSpend: 10000,   // 鑽石每消費 1 萬 → 鑽石×100
     kills:        100,     // 擊殺 100 隻 → 強化石100 + 鑽石×1
     loginDays:    7,       // 登入 7 天 → 鑽石×15 + 任務獎牌×2
@@ -131,8 +131,8 @@
     var box=document.getElementById('questContent'); if(!box) return;
     load();
     var html='';
-    html+=row('金幣達人','每獲得 1,000,000 楓幣：鑽石 ×2', state.goldGain, THRESH.goldGain, state.done.goldGain, '#2d7');
-    html+=row('礦藏大師','每獲得 20,000 強化石：鑽石 ×1', state.stoneGain, THRESH.stoneGain, state.done.stoneGain, '#2d7');
+    html+=row('金幣達人','每獲得 2,000,000 金幣：鑽石 ×2', state.goldGain, THRESH.goldGain, state.done.goldGain, '#2d7');
+    html+=row('礦藏大師','每獲得 40,000 強化石：鑽石 ×1', state.stoneGain, THRESH.stoneGain, state.done.stoneGain, '#2d7');
     html+=row('豪擲千金','每消費 10,000 鑽石：鑽石 ×100', state.diamondSpend, THRESH.diamondSpend, state.done.diamondSpend, '#c85');
     html+=row('狩獵連環','每擊殺 100 隻怪：強化石 ×100、鑽石 ×1', state.kills, THRESH.kills, state.done.kills, '#48c');
     html+=row('持之以恆','每登入 7 天：鑽石 ×15、任務獎牌 ×2（每天最多 +1）', state.loginDaysAccum % THRESH.loginDays, THRESH.loginDays, state.done.login7, '#7a5');

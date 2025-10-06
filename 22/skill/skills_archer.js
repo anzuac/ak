@@ -115,9 +115,9 @@ registerJobSkill('archer', {
     { 
       name: "聖龍箭",   
       mpCost: 40, 
-      cooldown: 30, 
+      cooldown: 90, 
       logic: { 
-        damageMultiplier: 4.0,    // 高倍率，爆發用
+        damageMultiplier: 3.0,    // 高倍率，爆發用
         levelMultiplier: 0.15,    // 每級增加傷害
         hits: 1,                  // 單發必中
         agiScale: 0.001,          // AGI 影響

@@ -1,156 +1,189 @@
-// 📦 status_manager_player.js (狀態效果優化與統一設定)
+// 📦 status_manager_player.js（玩家狀態：以「秒」為單位 + DoT 吃怪物 ATK）
+// 變更重點：
+// 1) DoT 改為吃「currentMonster.atk * 30%」，會自然吃到 BossCore 的攻擊 Buff / 難度已套用在 atk 的影響
+// 2) 預留「難度額外 DoT 倍率」dotAtkMul（預設 1，不會重複加乘你現有的怪物 ATK 難度調整）
+// 3) 機率可用 0~1 或 0~100；訊息逐條輸出；修正 ICON 名稱（用 PLAYER_ICON）
 
-/**
- * 產生一個在 min (包含) 和 max (包含) 之間的隨機整數。
- * @param {number} min - 最小值
- * @param {number} max - 最大值
- * @returns {number} - 隨機整數
- */
+/** 產生 min~max（含）的隨機整數 */
 function getRandomInt(min, max) {
-  min = Math.ceil(min);
-  max = Math.floor(max);
+  min = Math.ceil(min); max = Math.floor(max);
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// ⚙️ 統一設定所有狀態效果的數值與特性
-// duration: 狀態持續回合的隨機範圍 [min, max]
-// cooldown: 狀態冷卻回合的隨機範圍 [min, max]
-// damage: 傷害公式的參數
-// type: 狀態類型 (e.g., 'damage', 'debuff')
-// overlap: 疊加方式 ('stack' - 累加回合數, 'refresh' - 刷新回合數)
+/* ---------- 訊息/機率小工具 ---------- */
+const PLAYER_ICON = { poison:"☠️", burn:"🔥", paralyze:"⚡", weaken:"🌀", freeze:"❄️", bleed:"🩸", curse:"🕯️", blind:"🙈" };
+const NAME_ZH     = { poison:"中毒", burn:"燃燒", paralyze:"麻痺", weaken:"虛弱", freeze:"凍傷", bleed:"流血", curse:"詛咒", blind:"致盲" };
+
+function pct(x) {
+  const n = Number(x);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n <= 1 ? n * 100 : n; // 0.25 => 25，25 => 25，100 => 100
+}
+function say(lines) {
+  if (!lines || !lines.length) return;
+  for (const line of lines) {
+    if (typeof window.postPlayer === 'function') postPlayer(line);
+    else if (typeof logPrepend === 'function') logPrepend(line);
+  }
+}
+
+/*
+  ⚙️ 統一設定（全部以「秒」解讀）
+  duration: 狀態持續秒數隨機範圍 [min, max]
+  cooldown: 狀態冷卻秒數隨機範圍 [min, max]
+  type: 'damage' | 'debuff'
+  overlap: 'refresh' | 'stack'
+  mAtkPct: (可選) 若想讓某狀態不是 30%，可以在這裡指定該狀態的 DoT 百分比（吃怪物 ATK）
+*/
 const statusConfig = {
   poison: {
     duration: [3, 5],
-    cooldown: [3, 5],
-    damage: 0.01,
+    cooldown: [10, 15],
     type: 'damage',
-    overlap: 'refresh', // 毒素刷新持續時間
-    logText: (damage) => `☠️ 你中毒了，損失 ${damage} HP`
+    overlap: 'refresh',
+    // mAtkPct: 0.30, // 想讓中毒吃 30% 就打開，否則走預設 DEFAULT_DOT_PCT
+    logText: (damage) => `☠️ 你中毒了，損失 ${damage} HP`,
+    logTextEnd: () => `☠️ 中毒效果結束`
   },
   burn: {
-    duration: [2, 4],
-    cooldown: [3, 5],
-    damage: 0.1,
+    duration: [15, 25],
+    cooldown: [33, 45],
     type: 'damage',
-    overlap: 'refresh', // 燃燒刷新持續時間
-    logText: (damage) => `🔥 你燃燒中，損失 ${damage} HP`
+    overlap: 'refresh',
+    // mAtkPct: 0.30,
+    logText: (damage) => `🔥 你燃燒中，損失 ${damage} HP`,
+    logTextEnd: () => `🔥 燃燒效果結束`
   },
   paralyze: {
     duration: [1, 2],
-    cooldown: [5, 8],
+    cooldown: [15, 18],
     type: 'debuff',
-    overlap: 'refresh', // 麻痺刷新持續時間
+    overlap: 'refresh',
     logTextEnd: () => `⚡ 麻痺效果結束`
   },
   weaken: {
     duration: [2, 4],
-    cooldown: [4, 6],
+    cooldown: [14, 16],
     type: 'debuff',
-    overlap: 'refresh', // 虛弱刷新持續時間
+    overlap: 'refresh',
     logTextEnd: () => `🌀 虛弱效果結束`
   },
   freeze: {
     duration: [4, 6],
-    cooldown: [5, 8],
-    damage: 0.01,
+    cooldown: [15, 18],
     type: 'damage',
-    overlap: 'refresh', // 凍傷刷新持續時間
-    logText: (damage) => `❄️ 凍傷造成 ${damage} 傷害`
+    overlap: 'refresh',
+    // mAtkPct: 0.30,
+    logText: (damage) => `❄️ 凍傷造成 ${damage} 傷害`,
+    logTextEnd: () => `❄️ 凍傷效果結束`
   },
   bleed: {
     duration: [3, 5],
-    cooldown: [4, 6],
-    damage: 0.03,
+    cooldown: [14, 16],
     type: 'damage',
-    overlap: 'stack', // 流血效果可以疊加回合數
-    logText: (damage) => `🩸 流血造成 ${damage} 傷害`
+    overlap: 'stack',
+    // mAtkPct: 0.30,
+    logText: (damage) => `🩸 流血造成 ${damage} 傷害`,
+    logTextEnd: () => `🩸 流血效果結束`
   }
 };
 
+// === 預設 DoT 百分比（吃怪物 ATK 的 30%）
+const DEFAULT_DOT_PCT = 0.30;
+
 /**
- * 處理怪物對玩家施加的狀態效果。
- * @param {Object} monster - 怪物物件
+ * 怪物對玩家施加狀態（冷卻/持續皆以「秒」計）
+ * - 機率同時支援 0~1 或 0~100
+ * - 訊息逐條輸出
  */
 function applyStatusFromMonster(monster) {
   if (!monster || !player) return;
 
-  if (!player.statusEffects) player.statusEffects = {};
-  if (!player.statusCooldown) player.statusCooldown = {};
+  player.statusEffects  ||= {};
+  player.statusCooldown ||= {};
 
   const logs = [];
 
-  // 遍歷所有可能的狀態效果，統一處理
   for (const status in statusConfig) {
-    const config = statusConfig[status];
-    const monsterHasStatus = monster[status] || (monster.extra && monster.extra[status]);
-    const monsterChance = monster[status + 'Chance'] || (monster.extra && monster.extra[status + 'Chance']);
-    
-    // 檢查施加條件：怪物是否具備此狀態、是否通過機率判定、是否在冷卻中
-    if (monsterHasStatus && Math.random() * 100 < monsterChance && !player.statusCooldown[status]) {
-      const [minDuration, maxDuration] = config.duration;
-      const [minCooldown, maxCooldown] = config.cooldown;
-      
-      const newTurns = getRandomInt(minDuration, maxDuration);
-      
-      // 根據疊加方式更新回合數
-      if (config.overlap === 'stack') {
-        player.statusEffects[status] = (player.statusEffects[status] || 0) + newTurns;
-        logs.push(`✅ ${monster.name} 對你施加了 ${status}（+${newTurns} 回合）`);
-      } else { // 'refresh'
-        player.statusEffects[status] = newTurns;
-        logs.push(`✅ ${monster.name} 對你施加了 ${status}（刷新至 ${newTurns} 回合）`);
+    const cfg = statusConfig[status];
+    const has = monster[status] || (monster.extra && monster.extra[status]);
+
+    // 機率：允許 0.25 或 25
+    const rawChance  = monster[status + 'Chance'] ?? (monster.extra && monster.extra[status + 'Chance']) ?? 0;
+    const chancePct  = pct(rawChance);
+
+    // 具備、通過機率、且不在冷卻
+    if (has && (Math.random() * 100 < chancePct) && !player.statusCooldown[status]) {
+      const [dMin, dMax] = cfg.duration;
+      const [cMin, cMax] = cfg.cooldown;
+      const newSecs = getRandomInt(dMin, dMax);
+
+      if (cfg.overlap === 'stack') {
+        player.statusEffects[status] = (player.statusEffects[status] || 0) + newSecs;
+        logs.push(`${PLAYER_ICON[status] || "✨"} ${monster.name} 對你施加【${NAME_ZH[status] || status}】（+${newSecs}s）`);
+      } else {
+        player.statusEffects[status] = newSecs;
+        logs.push(`${PLAYER_ICON[status] || "✨"} ${monster.name} 對你施加【${NAME_ZH[status] || status}】（${newSecs}s）`);
       }
 
-      // 設定隨機冷卻時間
-      player.statusCooldown[status] = getRandomInt(minCooldown, maxCooldown);
+      // 設定冷卻
+      player.statusCooldown[status] = getRandomInt(cMin, cMax);
     }
   }
 
-  // 插入戰鬥紀錄
-  if (logs.length > 0) {
-    logPrepend(logs.join("<br>"));
-  }
+  if (logs.length > 0) say(logs);
 }
 
 /**
- * 每回合處理玩家所有狀態效果的運行。
+ * 每秒處理玩家狀態效果
+ * - DoT = currentMonster.atk * (每狀態 mAtkPct 或預設 30%)
+ * - 若你想讓難度再「額外」影響 DoT，請在 difficulty PRESET 加 dotAtkMul（不加就不變）
+ *   例：normal: { ..., dotAtkMul: 1.0 }, hell: { ..., dotAtkMul: 1.25 }
  */
 function processPlayerStatusEffects() {
   if (!player.statusEffects) return;
+
   const logs = [];
 
-  // 遍歷所有生效中的狀態效果
+  // 1) 讀取怪物當前 ATK（BossCore 套過面板後的值）
+  const m = window.currentMonster || null;
+  const monsterAtkBase = Math.max(0, Number(m?.atk ?? m?.baseAtk ?? 0));
+
+  // 2) 讀取「難度額外 DoT 倍率」，預設 1（避免和你原本已對怪物 ATK 做的難度加成重複）
+  const diff = (typeof window.getCurrentDifficulty === 'function') ? window.getCurrentDifficulty() : null;
+  const dotDiffMul = Number(diff?.dotAtkMul ?? 1) || 1;
+
+  // 實際 DoT 使用的 ATK
+  const monsterAtkForDot = Math.floor(monsterAtkBase * dotDiffMul);
+
   for (const status in player.statusEffects) {
-    const config = statusConfig[status];
-    const turnsLeft = player.statusEffects[status];
+    const cfg = statusConfig[status];
+    const secsLeft = player.statusEffects[status];
 
-    if (turnsLeft > 0) {
-      if (config.type === 'damage') {
-        let damage = 0;
-        // 燃燒是根據攻擊力，其他是根據最大 HP
-        if (status === 'burn') {
-            damage = Math.floor(player.totalStats.atk * config.damage);
-        } else {
-            damage = Math.floor(player.totalStats.hp * config.damage);
+    if (secsLeft > 0) {
+      if (cfg && cfg.type === 'damage') {
+        // 3) 每種狀態自己的百分比（沒有就走 DEFAULT_DOT_PCT）
+        const rate = (typeof cfg.mAtkPct === 'number') ? Math.max(0, cfg.mAtkPct) : DEFAULT_DOT_PCT;
+        const damage = Math.floor(monsterAtkForDot * rate);
+
+        if (damage > 0) {
+          player.currentHP = Math.max(0, (player.currentHP || 0) - damage);
+          logs.push(cfg.logText ? cfg.logText(damage) : `${NAME_ZH[status] || status} 造成 ${damage} 傷害`);
         }
-        player.currentHP -= damage;
-        logs.push(config.logText(damage));
       }
-      // 其他狀態類型（如 debuff）可以在這裡添加邏輯
-      
-      player.statusEffects[status]--;
 
-      // 如果狀態回合數歸零，紀錄結束訊息並刪除
+      // 倒數 1 秒
+      player.statusEffects[status] = secsLeft - 1;
+
+      // 結束訊息
       if (player.statusEffects[status] <= 0) {
-        if (config.logTextEnd) {
-          logs.push(config.logTextEnd());
-        }
+        if (cfg?.logTextEnd) logs.push(cfg.logTextEnd());
         delete player.statusEffects[status];
       }
     }
   }
 
-  // 處理狀態冷卻時間的遞減
+  // 冷卻以秒遞減
   if (player.statusCooldown) {
     for (const status in player.statusCooldown) {
       if (player.statusCooldown[status] > 0) {
@@ -162,8 +195,10 @@ function processPlayerStatusEffects() {
     }
   }
 
-  // 顯示所有回合發生的狀態效果訊息
-  if (logs.length > 0) {
-    logPrepend(logs.join("<br>"));
-  }
+  if (logs.length > 0) say(logs);
+  if (typeof updateResourceUI === 'function') updateResourceUI(); // 讓 HP 變化馬上反映
 }
+
+// 對外（可保留你原本的全域名稱）
+window.applyStatusFromMonster = applyStatusFromMonster;
+window.processPlayerStatusEffects = processPlayerStatusEffects;

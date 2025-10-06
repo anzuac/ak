@@ -18,6 +18,98 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// ==============================
+// Boss 狀態/冷卻 顯示工具（完整版）
+// 與 updateMonsterInfo() 相容：提供 getBossSelfBuffStatus / getBossCooldownStatus
+// ==============================
+
+(function () {
+  // 小工具：安全取得 BossCore 方法
+  const hasCore = () => typeof window.BossCore === "object" && window.BossCore;
+
+  // 兼容：從 BossCore 或 buffState 取「buff 剩餘秒數」
+  function getBuffTurns(mon, kind /* 'atk' | 'def' | 'shield' | 'speedMul' */) {
+    if (!mon) return 0;
+    // 1) 優先用 BossCore 的 getBuffTurns（它會把 alias 映射好）
+    if (hasCore() && typeof BossCore.getBuffTurns === "function") {
+      return Number(BossCore.getBuffTurns(mon, kind) || 0);
+    }
+    // 2) 後備：直接讀 monster.buffState.buffs
+    const map = mon?.buffState?.buffs || {};
+    const keyByKind = {
+      atk: "atkMul",
+      def: "defMul",
+      shield: "shieldMul",
+      speedMul: "speedMul" // 新增
+    };
+    const b = map[keyByKind[kind]];
+    
+    return Number(b?.remainSec || 0);
+  }
+
+  // 兼容：從 BossCore 或 skillCooldowns 取技能冷卻
+  function getSkillCd(mon, key) {
+    if (!mon || !key) return 0;
+    if (hasCore() && typeof BossCore.getSkillCooldown === "function") {
+      return Number(BossCore.getSkillCooldown(mon, key) || 0);
+    }
+    return Number(mon?.skillCooldowns?.[key] || 0);
+  }
+
+  // 顯示目前生效中的 Boss Buff（剩餘秒）
+  function getBossSelfBuffStatus(mon) {
+    if (!mon) return "無";
+
+    // 如果 BossCore._applyPanel 有寫入 UI 欄位，優先用它們（數字表示剩餘秒）
+    const rawAtk = Number(mon._enragedTurns || 0);
+    const rawDef = Number(mon._defBuffTurns || 0);
+    const rawShield = Number(mon._rootShieldTurns || 0);
+
+    let atkS = rawAtk, defS = rawDef, shieldS = rawShield;
+
+    // 若 UI 欄位不存在，fallback 用 buffState
+    if (!atkS) atkS = getBuffTurns(mon, "atk");
+    if (!defS) defS = getBuffTurns(mon, "def");
+    if (!shieldS) shieldS = getBuffTurns(mon, "shield");
+    
+    // --- 新增：取得攻擊速度 Buff 剩餘秒數 ---
+    const speedS = getBuffTurns(mon, "speedMul");
+    // --- 新增結束 ---
+
+    const parts = [];
+    if (atkS > 0) parts.push(`💪 攻擊↑（${atkS}s）`);
+    if (defS > 0) parts.push(`🛡️ 防禦↑（${defS}s）`);
+    if (shieldS > 0) parts.push(`🔰 護盾↑（${shieldS}s）`);
+    if (speedS > 0) parts.push(`⚡ 攻速↑（${speedS}s）`); // 新增顯示行
+
+    return parts.length ? parts.join("、") : "無";
+  }
+
+  // === 修正處：重寫 getBossCooldownStatus 以顯示所有技能冷卻 ===
+  function getBossCooldownStatus(mon) {
+    if (!mon || !Array.isArray(mon.skills)) {
+      return { all: "無" };
+    }
+
+    const allSkillsParts = [];
+    for (const s of mon.skills) {
+      if (!s || !s.key) continue;
+      
+      const cd = getSkillCd(mon, s.key);
+      const label = s.name || s.key;
+      
+      allSkillsParts.push(`${label}：${cd > 0 ? cd + "s" : "就緒"}`);
+    }
+
+    return {
+      all: allSkillsParts.length ? allSkillsParts.join("、") : "無",
+    };
+  }
+
+  // 導出給 updateMonsterInfo 使用
+  window.getBossSelfBuffStatus = getBossSelfBuffStatus;
+  window.getBossCooldownStatus = getBossCooldownStatus;
+})();
 
 function updateMonsterInfo(monster, hp) {
   const difficulty = (typeof getCurrentDifficulty === "function" ? getCurrentDifficulty() : {}) || {};
@@ -60,7 +152,7 @@ function updateMonsterInfo(monster, hp) {
 
   // ===== 狀態顯示 =====
   const bossSelfStatus = (typeof getBossSelfBuffStatus === "function") ? getBossSelfBuffStatus(monster) : "無";
-  const bossCd = (typeof getBossCooldownStatus === "function") ? getBossCooldownStatus(monster) : { buff: "無", skills: "無" };
+  const bossCd = (typeof getBossCooldownStatus === "function") ? getBossCooldownStatus(monster) : { all: "無" };
 
   const currentRoundSafe = (typeof round === "number" && isFinite(round)) ? round : 0;
   const playerAppliedAbnormalText =
@@ -132,13 +224,12 @@ function updateMonsterInfo(monster, hp) {
     <strong>${monster.name}${monster.isElite ? " [精英]" : ""}</strong><br>
     等級：${monster.level}<br>
     HP：${Math.max(hp, 0)} / ${monster.maxHp}<br>
-    ATK：${monster.atk}｜DEF：${monster.def}｜EXP：${baseExp}<br>
+    ATK：${monster.atk}｜DEF：${monster.def}｜EXP：${baseExp}｜<span class="muted">SPD：${(monster.speedPct || 1).toFixed(2)}x</span><br>
     精英怪出現機率：${fmtPct(eliteChancePct)}%<br><br>
 
     狀態效果：<br>
     🌟 Boss 狀態：${bossSelfStatus}<br>
-    ⏳ Boss Buff 冷卻：${bossCd.buff}<br>
-    ⏳ Boss 技能冷卻：${bossCd.skills}<br>
+    ⏳ Boss 技能冷卻：${bossCd.all}<br>
     🔸 玩家造成異常：${playerAppliedAbnormalText}<br>
     🔹 異常抗性：${abnormalResistText}<br>
     ${weakenRow}

@@ -1,22 +1,41 @@
-// 任務獎勵配置（共用）
+// 任務獎勵配置（共用）— 新版（請先載入此檔，再載 quest_*）
 var missionRewards = {
-  daily: [
-    { id: "kill_10_monsters", name: "擊敗 10 隻怪",
-      rewards: [ { type:"gold", amount:500 }, { type:"stone", amount:10 } ] },
-    { id: "get_3000_gold", name: "獲得楓幣 3000",
-      rewards: [ { type:"diamond", amount:1 } ] },
-    { id: "daily_login", name: "每日登入",
-      rewards: [ { type:"stone", amount:20 } ] },
-    { id: "get_100_stone", name: "獲得強化石 100",
-      rewards: [ { type:"diamond", amount:1 } ] },
-    { id: "finish_4_daily", name: "完成每日任務 4 次",
-      rewards: [ { type:"diamond_box", min:5, max:20 }, { type:"medal", amount:5 } ] }
+  // 每 6 小時會從此池中抽任務（每次最多新增 3 個，未領任務到 10 個就不補）
+  dailyTemplates: [
+    {
+      templateId: "kill",
+      type: "kills",
+      targetMin: 5,
+      targetMax: 20,
+      buildName: function(target){ return "擊敗 " + target + " 隻怪"; }
+    },
+    {
+      templateId: "gold",
+      type: "goldGain",
+      targetMin: 100,
+      targetMax: 300,
+      buildName: function(target){ return "獲得金幣 " + target; }
+    },
+    {
+      templateId: "stone",
+      type: "stoneGain",
+      targetMin: 10,
+      targetMax: 50,
+      buildName: function(target){ return "獲得強化石 " + target; }
+    }
   ],
 
+  // 每週：沿用你原設計（里程碑）
   weekly: [
-    { target: 5,  rewards: [ {type:"diamond",amount:2},  {type:"stone",amount:30},  {type:"medal",amount:2}  ] },
-    { target: 10, rewards: [ {type:"diamond",amount:3},  {type:"stone",amount:60},  {type:"medal",amount:5}  ] },
-    { target: 20, rewards: [ {type:"diamond",amount:5},  {type:"stone",amount:120}, {type:"medal",amount:15} ] },
-    { target: 30, rewards: [ {type:"diamond",amount:8},  {type:"stone",amount:200}, {type:"medal",amount:30}, {type:"diamond_box",min:20,max:50} ] }
+    { target:  5, rewards: [ {type:"diamond",amount:5},                  {type:"medal",amount:5} ] },
+    { target: 10, rewards: [ {type:"item", key:"高級探索券", amount:5},  {type:"medal",amount:5} ] },
+    { target: 15, rewards: [ {type:"diamond",amount:10},                 {type:"medal",amount:5} ] },
+    { target: 20, rewards: [ {type:"item", key:"高級探索券", amount:10}, {type:"medal",amount:10} ] },
+    { target: 25, rewards: [ {type:"diamond",amount:15},                 {type:"medal",amount:10} ] },
+    { target: 30, rewards: [ {type:"item", key:"sp點數券", amount:5},    {type:"medal",amount:10} ] },
+    { target: 35, rewards: [ {type:"item", key:"技能強化券", amount:3},   {type:"medal",amount:10} ] },
+    { target: 40, rewards: [ {type:"item", key:"高級探索券", amount:20}, {type:"medal",amount:20} ] },
+    { target: 45, rewards: [ {type:"item", key:"鑽石抽獎券", amount:5} ] },
+    { target: 50, rewards: [ {type:"item", key:"sp點數券", amount:5},    {type:"item", key:"高級探索券", amount:20} ] }
   ]
 };

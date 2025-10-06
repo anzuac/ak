@@ -1,6 +1,6 @@
 // statusEffects.js
-// 處理怪物身上的持續性異常狀態，並加入狀態抗性機制
-// 放在檔案頂部或 applyStatusToMonster 上方，集中管理中文名稱與顯示開關
+// 怪物「持續性異常」：純計算 / 秒數遞減 / 抗性判定（不寫日誌、不動 UI）
+
 const STATUS_ZH = {
   burn: "燃燒",
   poison: "中毒",
@@ -12,204 +12,136 @@ const STATUS_ZH = {
   frostbite: "凍傷",
 };
 
-// 測試時不要在戰鬥紀錄顯示被抗性擋下的訊息
-const SHOW_RESIST_LOG = false;
-// ★ 新增：將抗性回合數定義為常數
-const RESISTANCE_DURATION = 20;
-
-// 狀態效果處理函式集合
-const statusEffectsHandlers = {
-    // 燃燒：每回合根據玩家攻擊力的一定比例造成傷害
-    burn: (monster, player, statusData) => {
-        const damage = Math.floor((player.totalStats?.atk || 0) * (statusData.multiplier || 0));
-        if (damage <= 0) return null;
-        monster.hp -= damage;
-        return { damage, logText: `🔥 ${monster.name} 因燃燒受到 ${damage} 傷害` };
-    },
-
-    // 中毒：每回合根據玩家攻擊力的一定比例造成傷害
-    poison: (monster, player, statusData) => {
-        const damage = Math.floor((player.totalStats?.atk || 0) * (statusData.multiplier || 0));
-        if (damage <= 0) return null;
-        monster.hp -= damage;
-        return { damage, logText: `🧪 ${monster.name} 因中毒受到 ${damage} 傷害` };
-    },
-    
-    // 流血：每回合根據玩家攻擊力的一定比例造成傷害
-    bleed: (monster, player, statusData) => {
-        const damage = Math.floor((player.totalStats?.atk || 0) * (statusData.multiplier || 0));
-        if (damage <= 0) return null;
-        monster.hp -= damage;
-        return { damage, logText: `🩸 ${monster.name} 因流血受到 ${damage} 傷害` };
-    },
-
-    // 劇毒：每回合根據怪物最大生命值的一定比例造成傷害
-    deadly_poison: (monster, player, statusData) => {
-        const damage = Math.floor((monster.maxHp || 0) * (statusData.multiplier || 0));
-        if (damage <= 0) return null;
-        monster.hp -= damage;
-        return { damage, logText: `☠️ ${monster.name} 因劇毒受到 ${damage} 傷害` };
-    },
-
-    // 虛弱：降低怪物攻擊和防禦力
-    weaken: (monster, player, statusData) => {
-        if (!statusData.applied) {
-            const weakenRate = 0.40; // 降低 40%
-            monster.atk_base = monster.atk; // 備份原始值
-            monster.def_base = monster.def;
-            monster.atk = Math.floor(monster.atk * (1 - weakenRate));
-            monster.def = Math.floor(monster.def * (1 - weakenRate));
-            statusData.applied = true; // 標記為已套用
-            return { logText: `⚔️ ${monster.name} 陷入虛弱狀態，攻防下降！` };
-        }
-        return null;
-    },
-    
-    // 混亂：50% 機率攻擊自己（此狀態在 rpg.js 中處理）
-    chaos: () => null,
-
-    // 麻痺：無法行動（此狀態在 rpg.js 中處理）
-    paralyze: () => null,
-
-    // 凍傷：無法行動 + 持續傷害（在 rpg.js 和這裡同時處理）
-    frostbite: (monster, player, statusData) => {
-        const damage = Math.floor((player.totalStats?.atk || 0) * (statusData.multiplier || 0));
-        if (damage <= 0) return null;
-        monster.hp -= damage;
-        return { damage, logText: `❄️ ${monster.name} 因凍傷受到 ${damage} 傷害` };
-    }
+const RESISTANCE_DURATION = 20; // 抗性持續秒數（秒）
+// 給 UI 用的小圖示（不影響邏輯）
+const ICON = {
+  poison:"☠️", burn:"🔥", deadly_poison:"☠️",
+  weaken:"🌀", chaos:"🤪", paralyze:"⚡",
+  frostbite:"❄️", bleed:"🩸"
 };
 
-/**
- * 處理怪物身上的所有持續性異常狀態。
- * 此函式在每個回合開始時被呼叫。
- * @param {object} monster - 怪物物件
- * @param {object} player - 玩家物件
- * @param {number} round - 當前回合數
- */
-function processMonsterStatusEffects(monster, player, round) {
-    if (!monster || !monster.statusEffects) return;
+// —————————— 內部 handler（只計算，DoT 不扣血；weaken 需要改攻防） ——————————
+const handlers = {
+  burn: (monster, player, s) => {
+    const dmg = Math.floor((player?.totalStats?.atk || 0) * (s.multiplier || 0));
+    return dmg > 0 ? { type:"burn", damage:dmg, text:`${ICON.burn} ${monster.name} 因燃燒受到 ${dmg} 傷害` } : null;
+  },
+  poison: (monster, player, s) => {
+    const dmg = Math.floor((player?.totalStats?.atk || 0) * (s.multiplier || 0));
+    return dmg > 0 ? { type:"poison", damage:dmg, text:`${ICON.poison} ${monster.name} 因中毒受到 ${dmg} 傷害` } : null;
+  },
+  bleed: (monster, player, s) => {
+    const dmg = Math.floor((player?.totalStats?.atk || 0) * (s.multiplier || 0));
+    return dmg > 0 ? { type:"bleed", damage:dmg, text:`${ICON.bleed} ${monster.name} 因流血受到 ${dmg} 傷害` } : null;
+  },
+  deadly_poison: (monster, player, s) => {
+    const maxHp = Number(monster?.maxHp || 0);
+    const dmg = Math.floor(maxHp * (s.multiplier || 0));
+    return dmg > 0 ? { type:"deadly_poison", damage:dmg, text:`${ICON.poison} ${monster.name} 因劇毒受到 ${dmg} 傷害` } : null;
+  },
+  frostbite: (monster, player, s) => {
+    const dmg = Math.floor((player?.totalStats?.atk || 0) * (s.multiplier || 0));
+    return dmg > 0 ? { type:"frostbite", damage:dmg, text:`${ICON.frostbite} ${monster.name} 因凍傷受到 ${dmg} 傷害` } : null;
+  },
+  weaken: (monster, player, s) => {
+    // 第一次進場時套用 -40% 攻防；只在這裡改屬性
+    if (!s.applied) {
+      const rate = 0.40;
+      monster.atk_base ??= monster.atk;
+      monster.def_base ??= monster.def;
+      monster.atk = Math.floor(monster.atk * (1 - rate));
+      monster.def = Math.floor(monster.def * (1 - rate));
+      s.applied = true;
+      return { type:"weaken", damage:0, text:`${ICON.weaken} ${monster.name} 陷入虛弱，攻防下降` };
+    }
+    return null;
+  },
+  chaos:      () => null, // 在 rpg.js 行為內處理
+  paralyze:   () => null, // 在 rpg.js 行為內處理
+};
 
-    for (const effectType in monster.statusEffects) {
-        const status = monster.statusEffects[effectType];
-        if (status?.duration > 0) {
-            const handler = statusEffectsHandlers[effectType];
-            if (handler) {
-                const result = handler(monster, player, status);
-                if (result) {
-                    logPrepend?.(result.logText);
-                }
-            }
-            status.duration--;
-        }
+// —————————— 對外：每秒處理，回傳「事件陣列」，由 rpg.js 寫日誌與扣血 ——————————
+function processMonsterStatusEffects(monster, player, nowSec) {
+  if (!monster) return null;
+  monster.statusEffects ??= {};
+  const events = [];
+  const expired = [];
+
+  for (const k in monster.statusEffects) {
+    const s = monster.statusEffects[k];
+    if (!s || s.duration <= 0) continue;
+
+    // 呼叫 handler（DoT 只算數字，不扣血；weaken 會改攻防）
+    const ev = handlers[k]?.(monster, player, s);
+    if (ev) events.push(ev);
+
+    // 遞減 1 秒
+    s.duration = Math.max(0, s.duration - 1);
+    if (s.duration === 0) expired.push(k);
+  }
+
+  // 到期清理（weaken 還原攻防）
+  for (const k of expired) {
+    if (k === "weaken" && monster.statusEffects.weaken?.applied) {
+      monster.atk = monster.atk_base ?? monster.atk;
+      monster.def = monster.def_base ?? monster.def;
     }
-    
-    // 清除持續時間為 0 的狀態
-    for (const effectType in monster.statusEffects) {
-        if (monster.statusEffects[effectType].duration <= 0) {
-            // 虛弱恢復
-            if (effectType === 'weaken' && monster.statusEffects.weaken.applied) {
-                monster.atk = monster.atk_base;
-                monster.def = monster.def_base;
-                logPrepend?.(`🛡️ ${monster.name} 的虛弱狀態已解除，攻防恢復。`);
-            }
-            // 施加時已經開啟抗性倒數，這裡不再寫入
-            delete monster.statusEffects[effectType];
-        }
-    }
+    delete monster.statusEffects[k];
+  }
+  return { events, expired };
 }
 
-/**
- * 應用或更新怪物身上的異常狀態。
- * @param {object} monster - 怪物物件
- * @param {string} type - 狀態類型
- * @param {number} duration - 持續回合數
- * @param {number} multiplier - 傷害倍率或效果強度
- * @param {number} currentRound - 當前回合數，用於抗性計算
- */
-function applyStatusToMonster(monster, type, duration, multiplier, currentRound) {
-    if (!monster || !type || !Number.isFinite(duration)) return;
+// —————————— 對外：施加狀態（含 20 秒抗性）。只建檔，不寫日誌 ——————————
+function applyStatusToMonster(monster, type, duration, multiplier, nowSec) {
+  if (!monster || !type || !Number.isFinite(duration)) return { applied:false };
+  monster.statusEffects ??= {};
+  monster.statusResistance ??= {};
 
-    monster.statusEffects = monster.statusEffects || {};
-    monster.statusResistance = monster.statusResistance || {};
+  const last = Number(monster.statusResistance[type] ?? -Infinity);
+  const remain = RESISTANCE_DURATION - (nowSec - last);
+  if (remain > 0) return { applied:false, resisted:true, remain: Math.ceil(remain) };
 
-    // 抗性檢查（施加當下即開始倒數）
-    const lastAppliedRound = monster.statusResistance[type] || -Infinity;
-    const elapsed = currentRound - lastAppliedRound;
-    if (elapsed < RESISTANCE_DURATION) {
-        // 不顯示英文、不顯示倒數；如需顯示改成中文，打開 SHOW_RESIST_LOG
-        if (SHOW_RESIST_LOG) {
-            const zh = STATUS_ZH[type] || type;
-            logPrepend?.(`🛡️ ${monster.name} 對【${zh}】具有抗性，效果無效。`);
-        }
-        return;
-    }
+  if (monster.statusEffects[type]) {
+    // 已有同狀態 → 本次忽略
+    return { applied:false, already:true };
+  }
 
-    // 已有該異常 → 不允許重複施加（避免永遠維持 3 回合）
-    if (monster.statusEffects[type]) {
-        if (SHOW_RESIST_LOG) {
-            const zh = STATUS_ZH[type] || type;
-            logPrepend?.(`⚠️ ${monster.name} 已處於【${zh}】狀態，無法重複施加。`);
-        }
-        return;
-    }
-
-    // 記錄這次施加的回合 → 馬上開啟抗性倒數
-    monster.statusResistance[type] = currentRound;
-
-    // 確保至少 1 回合
-    const safeDuration = Math.max(1, duration);
-
-    // 套用異常
-    monster.statusEffects[type] = { duration: safeDuration, multiplier };
-    const zh = STATUS_ZH[type] || type;
-    logPrepend?.(`🧪 ${monster.name} 陷入【${zh}】狀態，持續 ${safeDuration} 回合。`);
-}
-
-// 🆕 彙整玩家對怪物造成的異常狀態 (修正版)
-function getMonsterAbnormalEffects(monster) {
-  const se = monster.statusEffects || {};
-  const abnormalEffects = [];
-  
-  const symbolMap = {
-    "poison": "☠️", "burn": "🔥", "deadly_poison": "☠️",
-    "weaken": "🌀", "chaos": "🤪", "paralyze": "⚡", 
-    "frostbite": "❄️", "bleed": "🩸"
+  monster.statusResistance[type] = nowSec;
+  monster.statusEffects[type] = {
+    duration: Math.max(1, Math.floor(duration)),
+    multiplier: Math.max(0, Number(multiplier || 0)),
+    applied: false
   };
+  return { applied:true, type, duration: monster.statusEffects[type].duration, multiplier };
+}
 
-  for (const key in se) {
-    if (se.hasOwnProperty(key) && se[key].duration > 0) {
-      const symbol = symbolMap[key] || '✨';
-      abnormalEffects.push(`${symbol} ${key.charAt(0).toUpperCase() + key.slice(1)}（${se[key].duration}回合）`);
+// —————————— UI 顯示用（不寫日誌） ——————————
+function getMonsterAbnormalEffects(monster) {
+  const se = monster?.statusEffects || {};
+  const parts = [];
+  for (const k in se) {
+    const s = se[k];
+    if (!s || s.duration <= 0) continue;
+    const zh = STATUS_ZH[k] || k;
+    parts.push(`${ICON[k] || "✨"} ${zh}（${s.duration}秒）`);
+  }
+  return parts.length ? parts.join("、") : "無";
+}
+
+function getMonsterAbnormalResistances(monster, nowSec) {
+  if (!monster?.statusResistance) return "無";
+  const parts = [];
+  for (const k in monster.statusResistance) {
+    const last = Number(monster.statusResistance[k] || 0);
+    const remain = RESISTANCE_DURATION - (nowSec - last);
+    if (remain > 0) {
+      const zh = STATUS_ZH[k] || k;
+      parts.push(`${ICON[k] || "🛡️"} ${zh}（${Math.ceil(remain)}秒）`);
     }
   }
-  
-  return abnormalEffects.length > 0 ? abnormalEffects.join("、") : "無";
+  return parts.length ? parts.join("、") : "無";
 }
 
-// 🆕 彙整怪物異常抗性 (修正版)
-function getMonsterAbnormalResistances(monster, currentRound) {
-    if (!monster || !monster.statusResistance) return "無";
-    const resistances = [];
-    const symbolMap = {
-        "poison": "☠️", "burn": "🔥", "deadly_poison": "☠️",
-        "weaken": "🌀", "chaos": "🤪", "paralyze": "⚡", 
-        "frostbite": "❄️", "bleed": "🩸"
-    };
-
-    for (const key in monster.statusResistance) {
-        const lastAppliedRound = monster.statusResistance[key] || 0;
-        const remainingRounds = RESISTANCE_DURATION - (currentRound - lastAppliedRound);
-        
-        if (remainingRounds > 0) {
-            const symbol = symbolMap[key] || '🛡️';
-            resistances.push(`${symbol} ${key.charAt(0).toUpperCase() + key.slice(1)}（${remainingRounds}回合）`);
-        }
-    }
-    return resistances.length > 0 ? resistances.join("、") : "無";
-}
-
-// 將函式暴露給全域環境，讓其他檔案可以呼叫
 window.processMonsterStatusEffects = processMonsterStatusEffects;
 window.applyStatusToMonster = applyStatusToMonster;
 window.getMonsterAbnormalEffects = getMonsterAbnormalEffects;

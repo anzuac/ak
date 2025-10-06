@@ -154,20 +154,21 @@ function getMonster(area, levelRange) {
         // 三圍吃難度（提供 stats/stat 後備）  
         const diff = resolveStatDifficulty(typeof getCurrentDifficulty === 'function' ? getCurrentDifficulty() : {});  
   
-        const bossMonster = {  
-          ...bossConfig,  
-          name: bossConfig.name,  
-          level: lvl,  
-          hp:  toInt((Number(bossConfig.hp)  || 1) * diff.hp), // 血量：只吃難度倍率
-atk: toInt(((Number(bossConfig.atk) || 1) + lvl * 12) * diff.atk), // 攻擊：基礎 + 等級成長
-def: toInt(((Number(bossConfig.def) || 1) + lvl *  8) * diff.def), // 防禦：基礎 + 等級成長
-          maxHp: undefined,  
-          dropRates: dr,  
-          baseExp:  bossBaseExp,   // 基礎值；EXP 難度加成於 getDrop() 統一處理  
-          baseGold: bossBaseGold,  // 基礎值；Gold 難度加成於 getDrop() 統一處理  
-          isElite: false,  
-          extra: isObj(bossConfig.extra) ? { ...bossConfig.extra } : {}  
-        };  
+   const bossMonster = {
+  ...bossConfig,
+  name: `👑 ${bossConfig.name}`,       // ←（可選）名稱加個標示
+  isBoss: true,                        // ← 這行就是旗標
+  level: lvl,
+  hp:  toInt((Number(bossConfig.hp)  || 1) * diff.hp),
+  atk: toInt(((Number(bossConfig.atk) || 1) + lvl * 12) * diff.atk),
+  def: toInt(((Number(bossConfig.def) || 1) + lvl *  8) * diff.def),
+  maxHp: undefined,
+  dropRates: dr,
+  baseExp:  bossBaseExp,
+  baseGold: bossBaseGold,
+  isElite: false,
+  extra: isObj(bossConfig.extra) ? { ...bossConfig.extra } : {}
+};
         bossMonster.maxHp = bossMonster.hp;  
   
         if (typeof bossMonster.init === 'function') { try { bossMonster.init(bossMonster); } catch(_){ } }  
@@ -227,9 +228,9 @@ def: toInt(((Number(bossConfig.def) || 1) + lvl *  8) * diff.def), // 防禦：�
     name: `${template.name} Lv.${level}`,  
     level,  
     // 屬性 = (模板基礎 + 等級加成) * 難度（屬性可在這裡乘）  
-    hp:  toInt(((Number(template.baseStats?.hp)  || 0) + level * 20) * difficulty.hp),  
-    atk: toInt(((Number(template.baseStats?.atk) || 0) + level * 12) * difficulty.atk),  
-    def: toInt(((Number(template.baseStats?.def) || 0) + level *  8) * difficulty.def),  
+    hp:  toInt(((Number(template.baseStats?.hp)  || 0) + level * 40) * difficulty.hp),  
+    atk: toInt(((Number(template.baseStats?.atk) || 0) + level * 28) * difficulty.atk),  
+    def: toInt(((Number(template.baseStats?.def) || 0) + level * 20) * difficulty.def),  
     dropRates,  
     baseExp: toInt(Number(template.exp) || 0),  // 基礎值；難度於 getDrop() 再乘  
     baseGold: toInt(baseGold),                  // 基礎值；難度於 getDrop() 再乘  
@@ -245,18 +246,18 @@ def: toInt(((Number(bossConfig.def) || 1) + lvl *  8) * diff.def), // 防禦：�
     newMonster.baseGold = toInt(newMonster.baseGold * 2);  
     newMonster.name = `⭐精英怪 ${newMonster.name}`;  
   
-    // 隨機 0~2 狀態 + 全部 buff  
+    // 隨機 1~3 狀態 + 全部 buff  
     const allStatusEffects = ["poison", "burn", "paralyze", "weaken", "freeze", "bleed", "curse", "blind"];  
     const allBuffs = ["atkBuff", "defBuff", "healBuff", "shieldBuff"];  
   
-    const numberOfStatusEffects = getRandomInt(0, 2);  
+    const numberOfStatusEffects = getRandomInt(1, 3);  
     const selected = new Set();  
     while (selected.size < numberOfStatusEffects) {  
       selected.add(allStatusEffects[Math.floor(Math.random() * allStatusEffects.length)]);  
     }  
     for (const eff of selected) {  
       newMonster.extra[eff] = true;  
-      newMonster.extra[`${eff}Chance`] = 25;  
+      newMonster.extra[`${eff}Chance`] = 100;  //異常機率
     }  
     if (!newMonster.extra.buff) newMonster.extra.buff = {};  
     allBuffs.forEach(b => newMonster.extra.buff[b] = true);  
