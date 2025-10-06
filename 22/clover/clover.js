@@ -21,7 +21,7 @@ function initializeCloverSystem() {
     // ====================================================================
     return;
   }
-  setTimeout(initializeCloverSystem, 100);
+  setTimeout(initializeCloverSystem, 400);
 }
 
 /* ========= 資源：只讀寫 player.gold / player.gem / player.stone ========= */
@@ -43,7 +43,7 @@ const GOLD_INC = 0.01;  // +1%
 
 function baseGoldCost(nextLevel) { return nextLevel * 9000; }
 function diamondCost(nextLevel)  { return Math.ceil(baseGoldCost(nextLevel) / 300); }
-function stoneCost(nextLevel)    { return Math.ceil(baseGoldCost(nextLevel) / 2); }
+function stoneCost(nextLevel)    { return Math.ceil(baseGoldCost(nextLevel) / 5); }
 
 /* ================== Modal（自建） ================== */
 function ensureCloverModal() {
@@ -212,7 +212,7 @@ function applyGainAndLog(routeLabel) {
 
 function upgradeViaGold() {
   const lv = player.coreBonus?.bonusData?.clover?.level || 0;
-  if (lv >= 100) return;
+  if (lv >= 200) return;
   const need = baseGoldCost(lv + 1);
   const g = getGold();
   if (g >= need) { spendGold(need); applyGainAndLog('楓幣'); }
