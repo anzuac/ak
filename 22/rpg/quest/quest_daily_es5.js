@@ -3,7 +3,7 @@
   if (!window.QuestCore) return;
 
   // 使用你的主命名空間
-  var STORAGE_KEY = "DAILY_STATE_V4";
+  var STORAGE_KEY = "DAILY_STATE_V5";
 
   // 參數
   var SLOT_ADD_PER_ROTATION = 0;  // 每次輪換最多新增任務數
