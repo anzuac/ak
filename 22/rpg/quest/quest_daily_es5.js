@@ -6,7 +6,7 @@
   var STORAGE_KEY = "DAILY_STATE_V4";
 
   // 參數
-  var SLOT_ADD_PER_ROTATION = 3;  // 每次輪換最多新增任務數
+  var SLOT_ADD_PER_ROTATION = 0;  // 每次輪換最多新增任務數
   var PENDING_CAP = 10;           // 未領取任務上限（未完成 + 完成未領）
   var SKEW_ALPHA_STONE = 2.0;     // 數值越大越偏小
   var SKEW_ALPHA_GOLD  = 2.2;
