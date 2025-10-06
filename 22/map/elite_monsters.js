@@ -11,7 +11,7 @@ const mapBossPool = {
   def: 0,
   baseExp: 0,
   baseGold: 20,
-  encounterRate: 100,
+  encounterRate: 0,
 
   dropRates: {
     gold: { min: 10, max: 20 },
