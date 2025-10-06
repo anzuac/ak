@@ -1,5 +1,6 @@
-// ===== Debug 控制（放在 main.js 最上面，且要先於其它腳本載入）=====
-window.DEBUG_MODE = true; // 發佈改成 false 就全靜音
+// ===== Debug 控制（放在 main.js
+window.DEBUG_MODE = false; // 測試時 true, 上線時改 false最上面，且要先於其它腳本載入）=====
+//window.DEBUG_MODE = true; // 發佈改成 false 就全靜音
 // 只允許有標籤的訊息印出（例：[EqBonus]、[Skills]、[SaveLoad]）
 window.DEBUG_ALLOW = new Set(["EqBonus", "Skills", "SaveLoad"]);
 

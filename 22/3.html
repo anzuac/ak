@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>RPG 自動戰鬥首頁</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+  
+  </style>
+</head>
+<body>
+  
+  <div id="gameSetupModal" class="setup-modal">
+    <div class="setup-modal-content">
+      <h2>設定角色</h2>
+      <div>
+        <label for="nicknameInput">暱稱：</label>
+        <input type="text" id="nicknameInput" placeholder="輸入你的暱稱">
+      </div>
+      <div>
+        <label for="jobSelect">職業：</label>
+        <select id="jobSelect">
+          <option value="warrior">戰士</option>
+          <option value="mage">法師</option>
+          <option value="archer">弓箭手</option>
+          <option value="thief">盜賊</option>
+        </select>
+      </div>
+      <button onclick="startGame()">開始遊戲</button>
+    </div>
+  </div>
+
+<!-- 只貼 <body> 內主要區塊，樣式沿用你現有的；把這段替換你原本的對應區塊即可 -->
+
+<div class="container">
+  <div class="row">
+    <div class="section">
+      <h2>角色資訊</h2>
+      <div>
+        暱稱：<span id="player-nickname"></span><br>
+        職業：<span id="player-job"></span>
+      </div>
+      <button id="job-change-btn">轉職</button>
+      <hr style="border: 1px solid #444; margin: 6px 0;">
+      <div>
+        等級：<span id="player-level">1</span><br>
+        經驗值：<span id="player-exp">0 / 100</span><br>
+        <progress id="exp-bar" value="0" max="100" style="width: 100%; height: 1.5em;"></progress>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>資源</h2>
+      <span>金錢：<strong id="gold">0</strong></span>
+      <span>鑽石：<strong id="gem">0</strong></span>
+      <span>強化石：<strong id="stone">0</strong></span>
+      <div style="margin-top:6px;">
+        <button onclick="openInventoryModal()">🎒 背包</button>
+        <button onclick="openShopModal()">商店</button>
+<button onclick="openGachaHub()" style="margin:6px; padding:8px 12px;">
+  🎰 抽獎轉盤
+  
+</button>
+
+
+
+
+
+
+
+      </div>
+    </div>
+  </div>
+
+
+<div class="row">
+  <div class="section" style="width:100%;">
+
+    <h2>
+      屬性點數
+      <!-- 顯示/隱藏分配 UI 的開關 -->
+      <button id="toggleStatAllocBtn"
+              onclick="toggleStatAlloc()"
+              style="margin-left:6px;padding:2px 6px;font-size:10px;background:#2e2e4e;color:#fff;border:1px solid #5c628e;border-radius:3px;cursor:pointer;">
+        隱藏
+      </button>
+    </h2>
+
+    <!-- ▼ 這一塊是「分配 UI」；若要預設隱藏可把 style 改成 display:none -->
+<div id="stat-alloc-area" style="margin-top:6px;">
+  <div>
+    <strong>可分配點數</strong>：<span id="stat-points-display">0</span>
+  </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+    <div style="flex:1;min-width:160px;display:flex;justify-content:space-between;align-items:center;">
+      <span>力量：<span id="str-display">0</span></span>
+      <div>
+        <button class="stat-button" onclick="allocateStat('str')" style="font-size:10px;padding:2px 6px;">＋</button>
+        <button class="stat-button" onclick="allocateStat('str','all')" style="font-size:10px;padding:2px 6px;">＋全部</button>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:160px;display:flex;justify-content:space-between;align-items:center;">
+      <span>敏捷：<span id="agi-display">0</span></span>
+      <div>
+        <button class="stat-button" onclick="allocateStat('agi')" style="font-size:10px;padding:2px 6px;">＋</button>
+        <button class="stat-button" onclick="allocateStat('agi','all')" style="font-size:10px;padding:2px 6px;">＋全部</button>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:160px;display:flex;justify-content:space-between;align-items:center;">
+      <span>智力：<span id="int-display">0</span></span>
+      <div>
+        <button class="stat-button" onclick="allocateStat('int')" style="font-size:10px;padding:2px 6px;">＋</button>
+        <button class="stat-button" onclick="allocateStat('int','all')" style="font-size:10px;padding:2px 6px;">＋全部</button>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:160px;display:flex;justify-content:space-between;align-items:center;">
+      <span>幸運：<span id="luk-display">0</span></span>
+      <div>
+        <button class="stat-button" onclick="allocateStat('luk')" style="font-size:10px;padding:2px 6px;">＋</button>
+        <button class="stat-button" onclick="allocateStat('luk','all')" style="font-size:10px;padding:2px 6px;">＋全部</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <!-- 「詳細數值」固定保留 -->
+    <div style="text-align:center;margin-top:10px;">
+      <button class="stat-button" onclick="openStatModal()">詳細數值</button>
+    </div>
+
+  </div>
+</div>
+  <div class="row">
+    <!-- 能力值：上半部固定顯示，下半部可收合 -->
+    <div class="section">
+<h2>能力值
+  <button class="mini-toggle" id="toggleExtraStatsBtn" onclick="toggleExtraStats()">隱藏</button>
+</h2>
+
+<!-- 固定顯示（不受收合影響） -->
+<div class="stat-list">
+  <span>血量：<strong id="hp">100 / 100</strong></span>
+  <span>護盾值：<strong id="shield">0</strong></span>
+  <span>魔力：<strong id="mp">0 / 0</strong></span>
+</div>
+
+<!-- 法師專用：魔力護盾（非法師會自動隱藏） -->
+<div id="manaShieldRow" class="stat-list" style="display:none;">
+  <span>魔力護盾：<strong id="manaShieldPct">0%</strong></span>
+  <span style="grid-column: span 1;">
+    <button id="manaShieldBtn" onclick="toggleMagicShield()">🛡️ 魔力護盾：關</button>
+  </span>
+</div>
+
+<!-- 進階能力（可收合） -->
+<div id="extra-stats" class="stat-list" style="margin-top:6px;">
+  <span>攻擊力：<strong id="atk">10</strong></span>
+  <span>防禦力：<strong id="def">5</strong></span>
+  <span>技能傷害：<strong id="skillDamage">0%</strong></span>
+  <span>回復：<strong id="recover">0%</strong></span>
+  <span>閃避：<strong id="dodge">0%</strong></span>
+  <span>爆擊率：<strong id="critRate">0%</strong></span>
+  <span>爆擊傷害：<strong id="critMultiplier">0%</strong></span>
+  <span id="comboRateRow" style="display:none;">連擊率：<strong id="comboRate">0%</strong></span>
+  <span>減傷率：<strong id="damageReduce">0%</strong></span>
+  <span>攻擊速度：<strong id="attackSpeed">100%</strong></span>
+  <span>經驗值：<strong id="expRate">0.0%</strong></span>
+  <span>掉寶率：<strong id="dropRate">0.0%</strong></span>
+  <span>金錢掉落率：<strong id="goldRate">0.0%</strong></span>
+</div>
+    </div>
+
+    <div class="section" id="side-slot">
+      <h2>強化區域</h2>
+      <button onclick="window.openSkillModal()">技能清單</button>
+
+      <button onclick="openElementEquipmentPanel()"> 元素裝備</button>
+      <button onclick="openModulePanel()">恢復系統</button>
+<button onclick="upgradeClover()">升級幸運草</button>
+
+<!-- 放在主頁的功能區塊（跟其他按鈕一起） -->
+<button onclick="equipMastery.open()" id="equipMasteryBtn">被動能力強化</button>
+<!-- 裝備整匯主頁按鈕 -->
+<button onclick="openSpModal()">✨ 能力點數</button>
+  </div>
+</div>
+
+
+
+  <div id="skillBackdrop"></div>
+  <div id="skillModal">
+    <h3>技能清單</h3>
+    <div id="skillList"></div>
+    <button onclick="closeSkillModal()">關閉</button>
+  </div>
+  <div class="card skill-status-card">
+
+  </div>
+
+<div class="row">
+  <!-- 左：戰鬥設定（你的原內容原封不動） -->
+  <div class="section" style="flex: 2;">
+    <h2>戰鬥設定</h2>
+    <button id="btnStart">開始戰鬥</button>
+    <button id="btnStop">停止戰鬥</button>
+    <button id="btnToggleDrops">顯示/隱藏掉落</button>
+    <span id="diffQueuedBadge" style="display:none;margin-left:.5rem;"></span>
+
+    <div id="monsters-box"></div>
+    <br>
+
+    <label for="mapSelect">選擇地圖：</label>
+    <select id="mapSelect"></select>
+
+    <label for="difficultySelect">難度：</label>
+    <select id="difficultySelect"></select>
+    <br>
+
+    <label for="levelRange">選擇怪物等級範圍：</label>
+    <div style="display:flex; align-items:center; gap:0.5em; flex-wrap:wrap;">
+      <select id="levelRange"></select>
+      <span id="minLevelNotice" style="color:#ffd700; font-size:0.9em;"></span>
+    </div>
+  </div>
+
+<!-- 右：獎勵紀錄（新加入） -->
+<div class="section" id="rewardBox" style="flex: 1; min-width:220px;">
+  <h2 style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <span>獎勵紀錄</span>
+    <!-- 之後用你的 JS 切換 aria-expanded 與 #reward-body 顯示/隱藏 -->
+    <button id="toggleRewardBtn"
+            class="mini-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="reward-body">
+      隱藏
+    </button>
+  </h2>
+
+<div id="reward-body">
+  <!-- 左右雙欄 -->
+  <div class="reward-stats" style="display:grid; gap:8px; margin-bottom:8px;">
+    <!-- 左：累積 -->
+    <div class="reward-col" style="background:#1a1a1a; padding:6px; border-radius:4px;">
+      <div style="font-weight:700;margin-bottom:4px;">累積</div>
+      <div>經驗值：<strong id="reward-exp">0</strong></div>
+      <div>金錢：<strong id="reward-gold">0</strong></div>
+      <div>強化石：<strong id="reward-stone">0</strong></div>
+    </div>
+
+
+  </div>
+<!-- 掉落物品網格（可滾動） -->
+<div id="reward-items"
+     style="margin-top:8px; max-height:132px; overflow:auto; background:#111; padding:6px; border-radius:6px;">
+  <div style="font-weight:700; margin-bottom:6px;">掉落物品</div>
+  <div id="reward-items-grid"
+       style="display:grid; grid-template-columns: repeat( auto-fill, minmax(120px, 1fr) ); gap:8px;">
+    <div class="empty">目前尚無物品掉落</div>
+  </div>
+</div>
+  <!-- 近期 3–4 筆，可滾動 -->
+  <div id="reward-history"
+       style="max-height:96px; overflow-y:auto; background:#111; padding:6px; border-radius:4px; font-size:12px;">
+    <div class="empty">目前尚無掉落紀錄</div>
+  </div>
+</div>
+</div>
+  
+    <div class="section" style="width: 100%;">
+<!-- ▼ 技能控制區（可收合） -->
+<section class="panel">
+  <header class="panel-header">
+    <span>技能控制區</span>
+    <button class="toggle-btn" onclick="togglePanel('skill-control-body')">▼</button>
+  </header>
+  <div id="skill-control-body" class="panel-body">
+    <div id="skillStatus" class="skill-grid">
+      <!-- 這裡會由 JS 渲染各技能的 CD / Buff 持續時間 -->
+    </div>
+  </div>
+</section>
+ </div>
+  
+  <div class="section" style="width: 100%;">
+    <h2>怪物資訊</h2>
+    <div id="monsterInfo">尚未遭遇怪物</div>
+  </div>
+
+
+<div class="battle-log-wrap">
+  <div class="battle-log-col player-log">
+    <div class="battle-log-title">玩家
+      <span id="hudPlayerAPS" style="font-size:12px;opacity:.8;margin-left:.5em">0/s</span>
+    </div>
+    <div id="playerLog" class="battle-log"></div>
+  </div>
+
+  <div class="battle-log-col monster-log">
+    <div class="battle-log-title">怪物
+      <span id="hudMonsterAPS" style="font-size:12px;opacity:.8;margin-left:.5em">0/s</span>
+    </div>
+    <div id="monsterLog" class="battle-log"></div>
+  </div>
+</div>
+<body>
+<body>
+   <link rel="stylesheet" href="css/http.css">
+  <script src="debug.js"></script>
+  <script src="stats_system/jobs.js"></script>
+  <script src="stats_system/utils_jobs.js"></script>
+  <script src="stats_system/player.js"></script>
+  <script src="stats_system/resources.js"></script>
+  <script src="save/save_core.js"></script>
+  <script src="stats_system/job_change.js"></script>
+
+  <script src="map/map_data.js"></script>
+  <script src="map/monster_data.js"></script>
+  <script src="map/elite_monsters.js"></script>
+  <script src="map/difficulty.js"></script>
+  <script src="map/monster_utils.js"></script>
+  <script src="map/ui_utils.js"></script>
+  <script src="mapboss/boss_mode.js"></script>
+  <script src="item/inventory.js"></script>
+  <script src="item/shop_system.js"></script>
+  <script src="equipment2/element_equipment.js"></script>
+  <script src="equipment2/element_upgrade.js"></script>
+  <script src="equipment2/element_advance.js"></script>
+  <script src="equipment2/element_starforce.js"></script>
+  <script src="equipment2/element_breakthrough.js"></script>
+  <script src="equipment2/equip_mastery.js"></script>
+  <script src="logic/rpg/log_dual.js"></script>
+  <script src="logic/rpg/rpg.js"></script
+  <script src="logic/rpg/rpg_1.js"></script>
+  <script src="logic/rpg/rpg_2.js"></script>
+  <script src="logic/rpg/rpgmobskill.js"></script>
+  <script src="logic/rpg/rpgplayerSkills.js"></script>
+  <script src="logic/rpg/battleUtils.js"></script>
+  <script src="logic/rpg/ignore_defense.js"></script>
+  <script src="logic/reward_tracker.js"></script>
+  <script src="skill/skills_ui.js"></script>
+  <script src="clover/clover.js"></script>
+  <script src="clover/sp_system.js"></script>
+  <script src="recovery/recovery_module.js"></script>
+  <script src="modskill/status_manager_player.js"></script>
+  <script src="skill/player_buffs.js"></script>
+  <script src="modskill/monster_skills.js"></script>
+  <script src="modskill/status_display_monster.js"></script>
+  <script src="modskill/monster_buffs.js"></script>
+  <script src="modskill/boss_buffs_core.js"></script>
+  <script src="modskill/boss_status_bridge.js"></script>
+  <script src="modskill/statusEffects.js"></script>
+  <script src="logic/ui_updates.js"></script> 
+  <script src="logic/monster_logic.js"></script> 
+  <script src="logic/game_init.js"></script>
+  <script src="logic/death_logic.js"></script>
+  <script src="skill/skills_controller.js"></script>
+  <script src="skill/skills_warrior.js"></script>
+  <script src="skill/skills_mage.js"></script>
+  <script src="skill/skills_archer.js"></script>
+  <script src="skill/skills_thief.js"></script>
+  <script src="skill/skills_common.js"></script>
+  <script src="skill/ui.js"></script>
+  <script src="skill/skill_panel.js"></script>
+  <script src="quest/mission_rewards.js"></script>
+  <script src="quest/quest_core_es5.js"></script>
+    <script src="quest/quest_daily_es5.js"></script>
+
+  <script src="quest/quest_weekly_es5.js"></script>
+  <script src="quest/quest_repeat_es5.js"></script>
+  <script src="quest/quest_achievements_es5.js"></script>
+  <script src="floating.js"></script>
+  <script src="stats_system/main.js"></script>
+  <script src="gacha/gacha_hub.js"></script>
+  <script src="gacha/gacha_medal.js"></script>
+  <script src="gacha/gacha_diamond.js"></script>
+  
+  <script src="css/1og_dual.js"></script>
+  <link rel="stylesheet" href="css/skills_panel.css">
+  <link rel="stylesheet" href="css/battle_log.css">
+  <script src="town/town_hub.js"></script>
+  <script src="town/town_system.js"></script>
+  <script src="town/explore_system.js"></script>
+
+
+    
+  <script src="save/save_facade_es5.js"></script>
+  
+  
+
+</body>
+</html>
