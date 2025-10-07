@@ -338,7 +338,14 @@
     wrap.appendChild($statContent);
     wrap.appendChild(percentHeader);
     wrap.appendChild($percentContent);
+        // === 精簡版：戰鬥力（只顯示一行） ===
+const $cpInline = document.createElement("div");
+$cpInline.id = "sp-cp-inline";
+$cpInline.style.cssText = "margin-top:6px;opacity:.9;";
+$cpInline.innerHTML = `戰鬥力：<strong id="sp-cp-inline-val">—</strong>`;
+wrap.appendChild($cpInline);
     wrap.appendChild($totalStats);
+
     wrap.appendChild(footer);
     $modal.appendChild(wrap);
     document.body.appendChild($modal);
@@ -349,7 +356,7 @@
     $redeemBtn.addEventListener("click", redeemSpPoints);
   }
 
-  function openSpModal() { ensureModal(); render(); $modal.style.display = "flex"; }
+function openSpModal() { ensureModal(); render(); refreshInlineCP(); $modal.style.display = "flex"; }
   function closeSpModal() { if ($modal) $modal.style.display = "none"; }
 
   // ===== 操作 =====
@@ -371,6 +378,7 @@
     renderName(key);
     renderRemain();
     renderTotalStats();
+    refreshInlineCP();
     if (AUTO_SAVE_AFTER_CHANGE) w.saveGame?.();
   }
 
@@ -389,6 +397,7 @@
     renderPercentName(key);
     renderRemain();
     renderTotalStats();
+    refreshInlineCP();
     if (AUTO_SAVE_AFTER_CHANGE) w.saveGame?.();
   }
 
@@ -478,36 +487,69 @@
     if ($remain) $remain.innerHTML = `剩餘可分配：<strong>${SP.unspent}</strong> / 總點數：${SP.total}`;
   }
 
-  function renderTotalStats() {
-    if (!$totalStats) return;
-    const total = computeTotalStats();
+function renderTotalStats() {
+  if (!$totalStats) return;
+  const total = computeTotalStats();
 
-    let html = `<h4 style="margin:0 0 10px;">總能力</h4>`;
+  let html = `<h4 style="margin:0 0 10px;">總能力</h4>`;
 
-    // 四大屬性：基礎 + SP + SP%
-    ["hp","mp","atk","def"].forEach(key => {
-      const row = total[key]; if (!row) return;
-      const finalVal = Math.floor(row.base + row.bonus);
-      html += `<div style="margin-bottom:4px;">${NAMES[key]}: 
-        <strong>${finalVal}</strong> 
-        (<span style="color:#ccc;">基礎 ${Math.floor(row.base)}</span> 
-         <span style="color:#5af;">+${Math.floor(row.flat)} SP</span> 
-         <span style="color:#fa5;">+${Math.floor(row.percent)} SP%</span>)</div>`;
-    });
+  // 四大屬性：base 已含 SP，這裡「只顯示」不再相加
+  ["hp","mp","atk","def"].forEach(key => {
+    const row = total[key]; if (!row) return;
 
-    // 其他屬性：維持百分比顯示
-    ["crit","critDmg","aspd","exp","drop","gold"].forEach(key => {
-      const row = total[key]; if (!row) return;
-      const base = row.base || 0, bonus = row.bonus || 0;
-      const dispBase = (base * 100).toFixed(2) + "%";
-      const dispBonus = (bonus * 100).toFixed(2) + "%";
-      html += `<div style="margin-bottom:4px;">${NAMES[key]}: 
-        <strong>${dispBase}</strong> ${bonus>0?`<span style="color:#5f9;">(+${dispBonus})</span>`:""}</div>`;
-    });
+    const finalVal = Math.floor(row.base);                 // ✅ 當前最終值（已含 SP）
+    const baseBeforeSp = Math.max(0, Math.floor(row.base - row.bonus)); // 加 SP 前的基礎
+    const flatSp = Math.floor(row.flat);                   // SP 直加
+    const pctSp  = (Number(row.percent) || 0).toFixed(2);  // SP% 顯示小數兩位
 
-    $totalStats.innerHTML = html;
+    html += `<div style="margin-bottom:4px;">${NAMES[key]}:
+      <strong>${finalVal}</strong>
+      (<span style="color:#ccc;">基礎 ${baseBeforeSp}</span>
+       <span style="color:#5af;">+${flatSp} SP</span>
+       <span style="color:#fa5;">+${pctSp} SP%</span>)</div>`;
+  });
+
+  // 其他百分比屬性（右邊這些本來就是百分比，base 已含 SP）
+  ["crit","critDmg","aspd","exp","drop","gold"].forEach(key => {
+    const row = total[key]; if (!row) return;
+    const finalPct = (Number(row.base)  * 100).toFixed(2) + "%"; // 已含 SP
+    const spDelta  = (Number(row.bonus) * 100).toFixed(2);       // 其中 SP 帶來的增量
+    html += `<div style="margin-bottom:4px;">${NAMES[key]}:
+      <strong>${finalPct}</strong>${row.bonus>0 ? ` <span style="color:#5f9;">(+${spDelta}%)</span>` : ""}</div>`;
+  });
+
+  $totalStats.innerHTML = html;
+}
+function refreshInlineCP() {
+  const el = document.getElementById("sp-cp-inline-val");
+  if (!el) return;
+
+  let cp = null;
+
+  // 先用你主頁已有的函式（若有）
+  if (typeof window.getDisplayedCombatPower === "function") {
+    try { cp = window.getDisplayedCombatPower(); } catch(_) {}
+  }
+  if (cp == null && typeof window.computeCombatPower === "function") {
+    try { cp = window.computeCombatPower(); } catch(_) {}
   }
 
+  // 再嘗試從主頁 DOM 讀（把選擇器換成你主頁的戰力元素）
+  if (cp == null) {
+    const node =
+      document.getElementById("cp-value") ||
+      document.getElementById("combat-power") ||
+      document.querySelector("[data-cp]") ||
+      document.querySelector(".cp-value");
+    if (node) {
+      const num = String(node.textContent || "").replace(/[^\d]/g, "");
+      if (num) cp = parseInt(num, 10);
+    }
+  }
+
+  if (cp == null || isNaN(cp)) cp = 0;
+  el.textContent = cp;
+}
   function render() {
     ["hp","mp","atk","def","crit","critDmg","aspd","exp","drop","gold"].forEach(key => {
       renderName(key);
@@ -519,6 +561,7 @@
     });
     renderRemain();
     renderTotalStats();
+    refreshInlineCP();
   }
 
   // 等 player 準備好再套用
@@ -526,6 +569,7 @@
     if (w.player && w.player.coreBonus) {
       applyToPlayer();
       renderTotalStats();
+      refreshInlineCP();
     } else {
       setTimeout(applyWhenReady, 50);
     }

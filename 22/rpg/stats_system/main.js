@@ -19,8 +19,6 @@ function getBaseJobSafe(job) { // [CHANGED] 新增的小工具，不會影響其
   return (typeof window.getBaseJob === "function") ? window.getBaseJob(j) : j;
 }
 
-
-
 document.addEventListener('DOMContentLoaded', () => {
   if (window.__BOOT_DONE__) return;     // ← 防止重複啟動
   window.__BOOT_DONE__ = true;          // ← 標記這輪已啟動
@@ -92,7 +90,11 @@ function startGame() {
 }
 
 
-
+// 統一顯示：保留兩位小數（含 .00）
+function fmt2(x) {
+  const n = Number(x);
+  return isNaN(n) ? "0.00" : n.toFixed(2);
+}
 function updateResourceUI() {
   const maxHp = player.totalStats.hp;
   const maxMp = player.totalStats.mp;
@@ -135,11 +137,10 @@ function updateResourceUI() {
   const intEl = document.getElementById("int-display");
   const lukEl = document.getElementById("luk-display");
 
-  if (strEl) strEl.textContent = `${totalStr} (${player.baseStats.str} + ${eqStr})`;
-  if (agiEl) agiEl.textContent = `${totalAgi} (${player.baseStats.agi} + ${eqAgi})`;
-  if (intEl) intEl.textContent = `${totalInt} (${player.baseStats.int} + ${eqInt})`;
-  if (lukEl) lukEl.textContent = `${totalLuk} (${player.baseStats.luk} + ${eqLuk})`;
-
+  if (strEl) strEl.textContent = `${fmt2(totalStr)} (${fmt2(player.baseStats.str)} + ${fmt2(eqStr)})`;
+if (agiEl) agiEl.textContent = `${fmt2(totalAgi)} (${fmt2(player.baseStats.agi)} + ${fmt2(eqAgi)})`;
+if (intEl) intEl.textContent = `${fmt2(totalInt)} (${fmt2(player.baseStats.int)} + ${fmt2(eqInt)})`;
+if (lukEl) lukEl.textContent = `${fmt2(totalLuk)} (${fmt2(player.baseStats.luk)} + ${fmt2(eqLuk)})`;
   // 狀態圖示
   let statusText = "";
   if (player.statusEffects) {

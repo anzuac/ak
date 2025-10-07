@@ -130,11 +130,21 @@
   </div>
 </div>
 
-    <!-- 「詳細數值」固定保留 -->
-    <div style="text-align:center;margin-top:10px;">
-      <button class="stat-button" onclick="openStatModal()">詳細數值</button>
-    </div>
+<!-- 「詳細數值」固定保留 -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;">
+  <div style="display:flex;align-items:center;gap:6px;">
+    <strong>戰鬥力：</strong>
+    <span id="cp-display" style="font-weight:bold;font-size:16px;color:#fff;transition:color .4s ease;">—</span>
+  </div>
 
+  <div style="display:flex;gap:6px;">
+    <button class="stat-button" onclick="showCPSummary()">明細</button>
+    <button class="stat-button" onclick="openStatModal()">詳細數值</button>
+  </div>
+</div>
+
+<!-- 戰鬥力明細折疊框（可選） -->
+<div id="cp-detail" style="display:none;margin-top:6px;padding:6px;background:#1a1a1a;border-radius:6px;font-size:13px;line-height:1.4;color:#ccc;"></div>
   </div>
 </div>
   <div class="row">
@@ -315,14 +325,13 @@
 <body>
 <body>
    <link rel="stylesheet" href="css/http.css">
-  <script src="debug.js"></script>
+  <script src=".js"></script>
   <script src="stats_system/jobs.js"></script>
   <script src="stats_system/utils_jobs.js"></script>
   <script src="stats_system/player.js"></script>
   <script src="stats_system/resources.js"></script>
   <script src="save/save_core.js"></script>
-  
- 
+
   
   
   
@@ -399,9 +408,10 @@
 
     
   <script src="save/save_facade_es5.js"></script>
+  <script src="stats_system/combat_power.js"></script>
+  <script src="stats_system/cp_ui.js"></script>
   
   
 
 </body>
-
 </html>
