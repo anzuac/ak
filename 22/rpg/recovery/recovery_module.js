@@ -229,18 +229,11 @@ window.openModulePanel = openModulePanel;
 window.closeRecoveryModal = closeRecoveryModal;
 window.upgradeRecovery = upgradeRecovery;
 
-// 若你有專門的 game_init.js 可保留以下（選用）
-window.addEventListener('load', () => {
-  // 讀檔
-  const ok = (typeof loadGame === 'function') ? loadGame() : false;
-  
-  // 雙保險：若 recovery_module 已載入，強制再同步一次等級
-  if (typeof syncRecoveryFromPlayer === 'function') {
-    syncRecoveryFromPlayer();
-  }
-  
-  // UI 重繪（若有）
-  if (typeof updateAllUI === 'function') {
-    updateAllUI();
-  }
-});
+// ✅ 等存檔套用後再同步等級/百分比（被動，不主動載入）
+if (window.GameSave?.onApply) {
+  GameSave.onApply(function () {
+    try { syncRecoveryFromPlayer(); } catch (e) {
+      console.warn("[recovery_module] sync on apply failed", e);
+    }
+  });
+}

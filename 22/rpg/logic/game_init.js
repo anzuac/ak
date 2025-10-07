@@ -145,8 +145,8 @@ function _loop(ts) {
 
 window.addEventListener("DOMContentLoaded", function () {
   // 初始化玩家與 UI
-  if (typeof window.initPlayer === "function") window.initPlayer();
-  if (typeof window.updateResourceUI === "function") window.updateResourceUI();
+/**  if (typeof window.initPlayer === "function") window.initPlayer();
+  if (typeof window.updateResourceUI === "function") window.updateResourceUI();*/
 
   // ====== 保留你的地圖/等級填入 ======
   var levelSelect = document.getElementById("levelRange");

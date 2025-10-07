@@ -58,7 +58,9 @@
       <div style="margin-top:6px;">
         <button onclick="openInventoryModal()">🎒 背包</button>
         <button onclick="openShopModal()">商店</button>
-<button onclick="openGachaHub()" style="margin:6px; padding:8px 12px;">
+        <button onclick="TownHub.open('town')">城鎮</button>
+<button onclick="window.QuestCore.open('daily')">🗒️ 任務</button>
+      <button onclick="openGachaHub()" style="margin:6px; padding:8px 12px;">
   🎰 抽獎轉盤
   
 </button>
@@ -179,7 +181,9 @@
       <h2>強化區域</h2>
       <button onclick="window.openSkillModal()">技能清單</button>
 
-      <button onclick="openElementEquipmentPanel()"> 元素裝備</button>
+
+<button onclick="openElementEquipmentPanel()">元素裝備</button>
+
       <button onclick="openModulePanel()">恢復系統</button>
 <button onclick="upgradeClover()">升級幸運草</button>
 
@@ -311,12 +315,17 @@
 <body>
 <body>
    <link rel="stylesheet" href="css/http.css">
-  <script src="debug.js"></script>
+  <script src=".js"></script>
   <script src="stats_system/jobs.js"></script>
   <script src="stats_system/utils_jobs.js"></script>
   <script src="stats_system/player.js"></script>
   <script src="stats_system/resources.js"></script>
   <script src="save/save_core.js"></script>
+  
+ 
+  
+  
+  
   <script src="stats_system/job_change.js"></script>
 
   <script src="map/map_data.js"></script>

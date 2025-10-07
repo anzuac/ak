@@ -19,29 +19,31 @@ function getBaseJobSafe(job) { // [CHANGED] 新增的小工具，不會影響其
   return (typeof window.getBaseJob === "function") ? window.getBaseJob(j) : j;
 }
 
+
+
 document.addEventListener('DOMContentLoaded', () => {
-    // 先載入 core 和 player 數據
-    initPlayer(); 
+  if (window.__BOOT_DONE__) return;     // ← 防止重複啟動
+  window.__BOOT_DONE__ = true;          // ← 標記這輪已啟動
 
-    // 嘗試從 Local Storage 載入遊戲存檔
-    const hasSave = loadGame(); // loadGame() 會回傳 true/false
-    const setupModal = document.getElementById('gameSetupModal');
+  // 你的原本流程保持：先 init，再嘗試載入
+  initPlayer();
+  const hasSave = loadGame(); // 回傳 true/false，下面照舊
+  const setupModal = document.getElementById('gameSetupModal');
 
-    if (hasSave) {
-        // 如果成功載入存檔，隱藏設定畫面
-        if (setupModal) setupModal.style.display = 'none';
-        // 並且直接更新 UI
-        updateResourceUI();
-        refreshMageOnlyUI();
-        rebuildActiveSkills();
-        ensureSkillEvolution?.();
-        renderSkillPanel?.();
-        console.log("已載入存檔，跳過角色設定。");
-    } else {
-        // 如果沒有存檔，顯示設定畫面
-        if (setupModal) setupModal.style.display = 'flex';
-        console.log("沒有找到存檔，顯示角色設定畫面。");
-    }
+  if (hasSave) {
+    if (setupModal) setupModal.style.display = 'none';
+    updateResourceUI();
+    refreshMageOnlyUI();
+    rebuildActiveSkills();
+    ensureSkillEvolution?.();
+    renderSkillPanel?.();
+    console.log("已載入存檔，跳過角色設定。");
+  } else {
+    if (setupModal) setupModal.style.display = 'flex';
+    console.log("沒有找到存檔，顯示角色設定畫面。");
+  }
+
+  // 後面你的暱稱長度限制、refreshMageOnlyUI() 等維持不動
 
     // 限制暱稱輸入長度 + 簡易提示
     const nickInput = document.getElementById('nicknameInput');

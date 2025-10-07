@@ -69,14 +69,14 @@ function ensureModalShell(){
     ensureModalShell();
     var openBtn=byId('questBtn'), closeBtn=byId('questClose');
     if(openBtn){ openBtn.onclick=function(){ window.QuestCore.open('daily'); }; }
-    else {
+    else {/**
       // 沒主頁按鈕就自動塞一顆測試用
       var testBtn=document.createElement('button');
       testBtn.id='questBtn';
       testBtn.innerHTML='🗒️ 任務／成就';
       testBtn.style.cssText='position:fixed;right:12px;bottom:12px;z-index:10001;border:none;border-radius:10px;background:#2d7;color:#fff;padding:8px 12px;font-weight:700;';
       testBtn.onclick=function(){ window.QuestCore.open('daily'); };
-      document.body.appendChild(testBtn);
+      document.body.appendChild(testBtn);*/
     }
     if(closeBtn) closeBtn.onclick=function(){ window.QuestCore.close(); };
   }

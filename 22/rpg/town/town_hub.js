@@ -1,14 +1,11 @@
 // =======================
-// town_hub.js — 分頁容器（城鎮 / 探索）ES5，可直上
-// 修復：1) 背景也會持續 tick；2) Modal 開啟時每秒重繪 active 分頁
+// town_hub.js — 分頁容器（城鎮 / 探索）ES5（節流版）
 // =======================
 (function (w) {
   "use strict";
 
-  // ====== 簡易工具 ======
   function byId(id){ return document.getElementById(id); }
 
-  // ====== 分頁註冊中心 ======
   var _tabs = []; // { id, title, render(containerEl), tick(dtSec), onOpen()?, onClose()? }
   var _activeId = null;
   var _modal = null;
@@ -16,11 +13,12 @@
   var _tabBar = null;
 
   var _lastTick = Date.now();
-  var _renderAccum = 0; // ← 新增：用來節流 UI 重繪頻率（約每秒一次）
+  var _renderAccum = 0;       // 用來節流 UI 重繪（每 ~1s）
+  var _loopTickAccum = 0;     // ★ 新增：把 rAF 的 dt 累積到每秒才 tick
+  var _rerenderPending = false; // ★ 新增：外部要求立即重繪
 
   function registerTab(def){
     if (!def || !def.id || !def.title || typeof def.render !== 'function') return;
-    // 若重覆註冊同 id，覆蓋舊的
     for (var i = 0; i < _tabs.length; i++) {
       if (_tabs[i].id === def.id) { _tabs[i] = def; rebuildTabBar(); return; }
     }
@@ -62,15 +60,14 @@
     if (btn) btn.onclick = close;
     m.addEventListener('click', function(e){ if (e.target === m) close(); });
 
-    // 飄浮入口（若沒手動放按鈕）
-    if (!byId('townHubBtn')){
+  /**  if (!byId('townHubBtn')){
       var fb = document.createElement('button');
       fb.id = 'townHubBtn';
       fb.innerHTML = '🏙 城鎮 / 探索';
       fb.style.cssText = 'position:fixed;right:12px;bottom:60px;z-index:10001;border:none;border-radius:10px;background:#4f46e5;color:#fff;padding:8px 12px;font-weight:700;';
       fb.onclick = open;
       document.body.appendChild(fb);
-    }
+    }*/
   }
 
   function rebuildTabBar(){
@@ -97,7 +94,7 @@
     _activeId = id;
     renderActive();
     if (cur && typeof cur.onOpen === 'function') cur.onOpen();
-    rebuildTabBar(); // 更新active色
+    rebuildTabBar();
   }
 
   function getTab(id){
@@ -115,39 +112,45 @@
   function open(){ ensureModal(); _modal.style.display='flex'; renderActive(); }
   function close(){ if(_modal) _modal.style.display='none'; var t=getTab(_activeId); if(t&&t.onClose) t.onClose(); }
 
+  // ★ 節流後的主迴圈：把 dt 累積到每秒才呼叫各分頁 tick(1)
   function tickLoop(){
     var now = Date.now();
     var dt = Math.max(0, (now - _lastTick) / 1000);
     _lastTick = now;
 
-    // ✅ 修復點 1：所有分頁在背景都會持續 tick（計時/產出不中斷）
-    for (var i=0;i<_tabs.length;i++){
-      var def = _tabs[i];
-      if (def && typeof def.tick === 'function') {
-        try { def.tick(dt); } catch (e) { /* 安全忽略單一分頁錯誤 */ }
+    _loopTickAccum += dt;
+    if (_loopTickAccum >= 1) {
+      var steps = Math.floor(_loopTickAccum);
+      _loopTickAccum -= steps;
+      for (var i=0;i<_tabs.length;i++){
+        var def = _tabs[i];
+        if (def && typeof def.tick === 'function') {
+          try { def.tick(steps); } catch (e) { /* 忽略單一分頁錯誤 */ }
+        }
       }
     }
 
-    // ✅ 修復點 2：當 Modal 開啟時，每 ~1 秒重繪一次當前分頁，讓倒數顯示即時
+    // Modal 開啟時每 ~1s 重繪；或外部要求立即重繪
     _renderAccum += dt;
-    if (_modal && _modal.style.display === 'flex' && _renderAccum >= 1) {
+    if ((_modal && _modal.style.display === 'flex' && _renderAccum >= 1) || _rerenderPending) {
       _renderAccum = 0;
+      _rerenderPending = false;
       renderActive();
     }
 
     requestAnimationFrame(tickLoop);
   }
 
-  // 啟動
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureModal);
   else ensureModal();
   requestAnimationFrame(tickLoop);
 
-  // 暴露 API
   w.TownHub = {
     open: open,
     close: close,
     registerTab: registerTab,
-    switchTo: switchTo
+    switchTo: switchTo,
+    // ★ 新增：外部可要求立即重繪一次（按鈕點擊後用）
+    requestRerender: function(){ _rerenderPending = true; }
   };
 })(window);

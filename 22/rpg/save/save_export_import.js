@@ -1,12 +1,17 @@
-// save_export_import.js
-// 匯出 / 匯入 本機存檔（支援 A/B 雙槽與舊版單鍵）
-
+// ==========================
+// save_export_import.js — 單槽版
+// ==========================
 (function () {
-  const NS = "GAME_SAVE_V2";
-  const MANIFEST_KEY = `${NS}:manifest`;
-  const SLOT_A = `${NS}:slotA`;
-  const SLOT_B = `${NS}:slotB`;
-  const OLD_SINGLE_KEY = `${NS}`; // 你的舊版單一 key
+  const NS = "GAME_SAVE_V4";
+  const KEY_DATA = `${NS}:data`;
+  const KEY_META = `${NS}:meta`;
+
+  // 舊制（只讀）
+  const OLD_NS = "GAME_SAVE_V2";
+  const OLD_MANIFEST = `${OLD_NS}:manifest`;
+  const OLD_SLOT_A   = `${OLD_NS}:slotA`;
+  const OLD_SLOT_B   = `${OLD_NS}:slotB`;
+  const OLD_SINGLE   = `${OLD_NS}`;
 
   function ts() {
     const d = new Date();
@@ -15,30 +20,29 @@
   }
 
   function readActiveRaw() {
-    const manifestRaw = localStorage.getItem(MANIFEST_KEY);
+    // 單槽優先
+    const raw = localStorage.getItem(KEY_DATA);
+    if (raw) return { raw, schemaVersion: JSON.parse(localStorage.getItem(KEY_META)||"{}").schemaVersion || 2, format: "single-slot" };
+
+    // 退回舊制 A/B
+    const manifestRaw = localStorage.getItem(OLD_MANIFEST);
     if (manifestRaw) {
       try {
         const m = JSON.parse(manifestRaw);
-        const activeKey = m?.active === "slotB" ? SLOT_B : SLOT_A;
-        const raw = localStorage.getItem(activeKey);
-        if (raw) return { raw, schemaVersion: m.schemaVersion || 1, format: "ab-slots" };
-        // 沒有 active 時嘗試 backup
-        const backupKey = (activeKey === SLOT_A) ? SLOT_B : SLOT_A;
-        const raw2 = localStorage.getItem(backupKey);
-        if (raw2) return { raw: raw2, schemaVersion: m.schemaVersion || 1, format: "ab-slots" };
+        const activeKey = m?.active === "slotB" ? OLD_SLOT_B : OLD_SLOT_A;
+        const rawAB = localStorage.getItem(activeKey) || localStorage.getItem(activeKey===OLD_SLOT_A?OLD_SLOT_B:OLD_SLOT_A);
+        if (rawAB) return { raw: rawAB, schemaVersion: m.schemaVersion || 1, format: "ab-slots" };
       } catch {}
     }
-    const old = localStorage.getItem(OLD_SINGLE_KEY);
+    // 舊單鍵
+    const old = localStorage.getItem(OLD_SINGLE);
     if (old) {
-      // 舊版單鍵
-      let sv = 1;
-      try { sv = JSON.parse(old)?.schemaVersion || 1; } catch {}
-      return { raw: old, schemaVersion: sv, format: "single-key" };
+      let sv = 1; try { sv = JSON.parse(old)?.schemaVersion || 1; } catch {}
+      return { raw: old, schemaVersion: sv, format: "single-key-legacy" };
     }
     return null;
   }
 
-  // 下載文字檔
   function download(filename, text) {
     const blob = new Blob([text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -53,27 +57,23 @@
     }, 0);
   }
 
-  // 對外：匯出
   window.exportSaveToFile = function exportSaveToFile() {
-    // 先確保把暫存進度落盤（若有你的新 save_core）
     try { window.saveGame?.(); } catch {}
     const pack = readActiveRaw();
     if (!pack) {
       alert("找不到可匯出的存檔。");
       return;
     }
-    // 用信封包起來，保留 schema 與來源格式
     const envelope = {
       type: "rpg-save",
-      storageFormat: pack.format,     // "ab-slots" | "single-key"
+      storageFormat: pack.format,   // "single-slot" | "ab-slots" | "single-key-legacy"
       schemaVersion: pack.schemaVersion || 1,
       exportedAt: Date.now(),
-      payload: pack.raw               // 直接保存原始 JSON 字串
+      payload: pack.raw
     };
     download(`save-${ts()}.json`, JSON.stringify(envelope));
   };
 
-  // 對外：匯入
   window.importSaveFromFile = async function importSaveFromFile(evt) {
     const file = evt?.target?.files?.[0];
     if (!file) return;
@@ -82,23 +82,19 @@
       let payloadRaw = null;
       let schemaVersion = 1;
 
-      // 嘗試辨識「信封格式」
       try {
         const obj = JSON.parse(text);
         if (obj && obj.type === "rpg-save" && typeof obj.payload === "string") {
           payloadRaw = obj.payload;
           schemaVersion = obj.schemaVersion || 1;
         } else {
-          // 也可能直接給存檔物件 → 我們 stringify 回原文
           payloadRaw = JSON.stringify(obj);
           schemaVersion = obj.schemaVersion || 1;
         }
       } catch {
-        // 純文字（不太可能），直接用
         payloadRaw = text;
       }
 
-      // 基本檢查：至少要能 parse
       try { JSON.parse(payloadRaw); }
       catch (e) {
         alert("匯入失敗：檔案內容不是有效的存檔 JSON。");
@@ -106,26 +102,21 @@
         return;
       }
 
-      // 寫入本機 A 槽並設為 active（簡化流程，讓 save_core 接手之後的原子寫）
-      localStorage.setItem(SLOT_A, payloadRaw);
-      localStorage.setItem(MANIFEST_KEY, JSON.stringify({
+      // 直接覆蓋單槽主檔（meta 交由 core 在下次 save 重算；這裡先簡單寫入）
+      localStorage.setItem(KEY_DATA, payloadRaw);
+      localStorage.setItem(KEY_META, JSON.stringify({
         schemaVersion,
-        active: "slotA",
-        backup: "slotB",
-        savedAt: Date.now(),
+        importedAt: Date.now(),
         size: payloadRaw.length,
-        checksum: "imported"
+        checksum: "imported" // 標記，代表這筆 meta 不是核心寫入的
       }));
 
-      // 重新載入到遊戲狀態
       const ok = window.loadGame?.();
       if (ok) {
         alert("✅ 匯入完成，已套用到遊戲。");
       } else {
         alert("⚠️ 已寫入本機，但載入流程未成功。請重新整理或稍後再試。");
       }
-
-      // 清空 input 值，方便下次選同一檔
       if (evt?.target) evt.target.value = "";
     } catch (err) {
       console.error("匯入錯誤：", err);
