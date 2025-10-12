@@ -1,6 +1,6 @@
 // recovery_system.js
 // 自然恢復（讀秒，不受回合影響）— 統一「小數制」：0.2 = 20%
-// ✅ 取消職業區分版本 + GrowthHub 分頁 UI
+// ✅ 取消職業區分版本 + GrowthHub 分頁 UI + 獨立存檔
 
 let recoverySystem;
 
@@ -12,6 +12,22 @@ const MP_INC_PER_LVL = 1;  // 每升1級 +1  MP/5s
 
 const PCT_PER_LEVEL_30S = 0.02; // 每升1級 +2%（小數）
 const PCT_CAP_30S = 0.60;       // 上限 60%
+
+// === 獨立存檔（與主存檔分離） ===
+const RECOVERY_STORE_KEY = "recovery_system_store_v1";
+function loadRecoveryStore() {
+  try { return JSON.parse(localStorage.getItem(RECOVERY_STORE_KEY)) || {}; } catch(_) { return {}; }
+}
+function saveRecoveryStore(obj) {
+  try { localStorage.setItem(RECOVERY_STORE_KEY, JSON.stringify(obj || {})); } catch(_) {}
+}
+function persistRecoveryToStore() {
+  const obj = loadRecoveryStore();
+  obj.level = Math.min(20, Math.max(1, recoverySystem?.level || 1));
+  // 存「系統提供的基礎百分比」而不是玩家最終加成（避免重覆相加）
+  obj.basePercentDecimal = toFraction(player?.recoverPercentBaseDecimal || 0);
+  saveRecoveryStore(obj);
+}
 
 // === 工具 ===
 function toFraction(x) {
@@ -55,10 +71,17 @@ function per5sPercent() {
 
 // === 初始化 ===
 function initRecoverySystem() {
-  const prevLevel = player?.recoverySystem?.level ?? 1;
+  const store = loadRecoveryStore();
+  const prevLevelFromStore  = store.level;
+  const prevLevelFromPlayer = player?.recoverySystem?.level;
+
+  const prevLevel = Math.min(
+    20,
+    Math.max(1, (prevLevelFromStore ?? prevLevelFromPlayer ?? 1))
+  );
 
   recoverySystem = {
-    level: Math.min(20, Math.max(1, prevLevel)),
+    level: prevLevel,
     maxLevel: 20, // ← 統一 20
 
     // 每 5 秒的固定恢復（不分職業）
@@ -96,19 +119,44 @@ function initRecoverySystem() {
     get upgradeCost() { return 200 * this.level; }
   };
 
+  // 優先用獨立存檔中的 basePercentDecimal 當作玩家的基礎百分比來源（若有）
+  if (store.basePercentDecimal != null) {
+    player.recoverPercentBaseDecimal = toFraction(store.basePercentDecimal);
+  }
+
   applySystemPercentToPlayer();
+
+  // 初始化完成就寫回獨立存檔，完成遷移/同步
+  persistRecoveryToStore();
+
   window.recoverySystem = recoverySystem;
 }
 
 // ✅ 載入存檔後的同步（供 save_core.js 呼叫）
 function syncRecoveryFromPlayer() {
   if (!player) return;
-  const lvl = Math.min(20, Math.max(1, player?.recoverySystem?.level ?? 1));
-  if (recoverySystem) {
-    recoverySystem.level = lvl;
-    applySystemPercentToPlayer();
-    window.recoverySystem = recoverySystem;
+
+  const store = loadRecoveryStore();
+
+  // 以獨立存檔為主；若沒有，再看 player
+  const lvl = Math.min(20, Math.max(1, (store.level ?? player?.recoverySystem?.level ?? 1)));
+  if (recoverySystem) recoverySystem.level = lvl;
+
+  // 同步基礎百分比（避免把技能、道具加成重覆疊）
+  if (store.basePercentDecimal != null) {
+    player.recoverPercentBaseDecimal = toFraction(store.basePercentDecimal);
   }
+
+  applySystemPercentToPlayer();
+
+  // 回寫到 player（保持舊 save 結構不壞）
+  player.recoverySystem = player.recoverySystem || {};
+  player.recoverySystem.level = recoverySystem.level;
+
+  // 也回寫到獨立存檔，確保一致
+  persistRecoveryToStore();
+
+  window.recoverySystem = recoverySystem;
 }
 window.syncRecoveryFromPlayer = syncRecoveryFromPlayer;
 
@@ -203,11 +251,14 @@ function upgradeRecovery() {
   player.gem -= cost;
   recoverySystem.level = Math.min(recoverySystem.maxLevel, recoverySystem.level + 1);
 
-  // 同步到存檔來源（player）
+  // 同步到存檔來源（player 舊欄位）
   player.recoverySystem = player.recoverySystem || {};
   player.recoverySystem.level = recoverySystem.level;
 
   applySystemPercentToPlayer();
+
+  // ✅ 同步到獨立存檔
+  persistRecoveryToStore();
 
   if (typeof updateResourceUI === "function") updateResourceUI?.();
   if (typeof saveGame === 'function') saveGame();
@@ -278,3 +329,13 @@ if (window.GameSave?.onApply) {
     });
   }
 })();
+
+// （可選）提供重置方便測試
+window.resetRecoveryStore = function() {
+  saveRecoveryStore({});
+  if (recoverySystem) recoverySystem.level = 1;
+  if (player) {
+    player.recoverPercentBaseDecimal = 0;
+    applySystemPercentToPlayer();
+  }
+};
