@@ -13,6 +13,20 @@
   function addItem(name, qty){ qty=toInt(qty||1); if(qty<=0) return; try{ w.addItem && w.addItem(name, qty); }catch(_){} }
   function getItemQuantity(name){ try{ return toInt(w.getItemQuantity? w.getItemQuantity(name):0);}catch(_){return 0;} }
 
+  // ★ 新增：格式化 HH:MM:SS
+  function fmtHMS(sec){
+    sec = Math.max(0, toInt(sec));
+    var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+    function p(v){ return (v<10?'0':'')+v; }
+    return p(h)+':'+p(m)+':'+p(s);
+  }
+  // ★ 新增：距離當地「明日 00:00:00」的秒數
+  function secUntilReset(){
+    var now = new Date();
+    var next = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0,0,0,0);
+    return Math.max(0, Math.floor((next - now)/1000));
+  }
+
   // ====== 參數 ======
   var LS_KEY = 'EXPLORE_SPLIT_V2_MULTI';
   var EXPLORE_TICK_SEC = 60;      // 每隊每分鐘嘗試一次
@@ -38,7 +52,8 @@
     { name: '低階潛能解放鑰匙', type: 'item', key: '低階潛能解放鑰匙', cap: 15, rate: 0.05 },
     { name: '中階潛能解放鑰匙', type: 'item', key: '中階潛能解放鑰匙', cap: 10, rate: 0.03 },
     { name: '高階潛能解放鑰匙', type: 'item', key: '高階潛能解放鑰匙', cap: 5,  rate: 0.01 },
-    { name: '怪物獎牌',       type: 'item',   key: '怪物獎牌',   cap: 50, rate: 0.05 }
+    { name: '怪物獎牌',       type: 'item',   key: '怪物獎牌',   cap: 50, rate: 0.05 },
+    { name: '轉職寶珠',       type: 'item',   key: '轉職寶珠',   cap: 100, rate: 0.25 }
   ];
 
   // ====== 狀態 ======
@@ -162,7 +177,7 @@
     return changed;
   }
 
-  // ★ 每秒一次的總 tick；只有改變時才 upd()/saveGame()
+  // ★ 每秒一次的總 tick；最後一定請求重繪，讓倒數會更新
   var _exploreTickGate = 0;
   function tick(sec){
     _exploreTickGate += Number(sec)||0;
@@ -186,6 +201,9 @@
       upd();
       saveGame();
     }
+
+    // ★ 新增：確保倒數每秒刷新
+    try { w.TownHub.requestRerender && w.TownHub.requestRerender(); } catch(_) {}
   }
 
   function bar(pct){ pct=clamp(pct,0,100); return '<div style="height:8px;background:#0b1220;border-radius:999px;overflow:hidden;margin-top:6px"><span style="display:block;height:100%;width:'+pct+'%;background:linear-gradient(90deg,#60a5fa,#34d399)"></span></div>'; }
@@ -235,9 +253,14 @@
       : '<div style="opacity:.6">（目前沒有紀錄）</div>'
     );
 
+    // ★ 新增：每日重置倒數顯示（到當地時間 00:00）
+    var resetHtml =
+      '<div style="margin:6px 0 0;opacity:.9">掉落上限重置倒數：<b>'+ fmtHMS(secUntilReset()) +'</b></div>';
+
     container.innerHTML =
       card('🔍 探索（每日 / 多隊）',
         '<div>探索等級：<b>Lv.'+state.exploreLv+' / '+EXPLORE_MAX+'</b>（每級每日上限 +10%）</div>'+
+        resetHtml + // ★ 放在等級行下方
         upHtml+
         '<div style="margin-top:10px;padding-top:6px;border-top:1px solid #1f2937"><b>掉落進度（全隊共享）</b>'+rows+'</div>'
       )+
