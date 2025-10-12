@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <title>RPG 自動戰鬥首頁</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <style>
   
   </style>
@@ -57,14 +56,14 @@
       <span>強化石：<strong id="stone">0</strong></span>
       <div style="margin-top:6px;">
         <button onclick="openInventoryModal()">🎒 背包</button>
-        <button onclick="openShopModal()">商店</button>
+        <!-- 進商店 Hub 的主分頁 -->
+<button onclick="ShopHub.open(); ShopHub.switchTo('shop_main')">🛒 商店</button>
+
         <button onclick="TownHub.open('town')">城鎮</button>
 <button onclick="window.QuestCore.open('daily')">🗒️ 任務</button>
-      <button onclick="openGachaHub()" style="margin:6px; padding:8px 12px;">
-  🎰 抽獎轉盤
-  
+<button onclick="DungeonHub.open()">🏰 副本中心</button>
+<button onclick="GachaHub.open()" >🎰 抽獎中心
 </button>
-
 
 
 
@@ -339,9 +338,11 @@
   <script src="map/monster_utils.js"></script>
   <script src="map/ui_utils.js"></script>
   <script src="mapboss/boss_mode.js"></script>
-  <script src="item/inventory.js"></script>
-  <script src="item/shop_system.js"></script>
-      <script src="equipment_hub/equipment_hub.js"></script>
+<script src="item/shop_hub.js"></script>
+<script src="item/inventory.js"></script>
+<script src="item/shop_system.js"></script>
+<script src="item/shop_material.js"></script>
+<script src="equipment_hub/equipment_hub.js"></script>
   
   <script src="equipment_hub/equipment2/element_equipment.js"></script>
   <script src="equipment_hub/equipment2/element_upgrade.js"></script>
@@ -360,7 +361,7 @@
   <script src="logic/reward_tracker.js"></script>
   
     <script src="logic/damage_power_inline.js"></script>
-  
+ 
   <script src="skill/skills_ui.js"></script>
   <script src="hub/clover/clover.js"></script>
   <script src="hub/clover/sp_system.js"></script>
@@ -414,6 +415,22 @@
   <script src="town/Advanced/high_explore_data.js"></script>
 
   <script src="town/Advanced/high_explore_main.js"></script>
+  
+  
+<script src="dungeon/common/tickets.js"></script>
+<script src="dungeon/common/tickets_ui.js"></script>
+<script src="dungeon/dungeon_gate.js"></script>     <!-- 可選，但若要用 bindButtons 必須先載入 -->
+
+<script src="dungeon/dungeon_hub.js"></script>
+<script src="dungeon/dungeon_battle_core.js"></script>
+<script src="dungeon/waves_config.js"></script>
+<script src="dungeon/dungeon_tabs_challenge.js"></script> 
+
+<script src="dungeon/dungeon/v13_config.js"></script> 
+<script src="dungeon/dungeon/dungeon_tabs_v13.js"></script>
+<script src="dungeon/challenge/challenge_accessory_config.js"></script>
+<script src="dungeon/challenge/challenge_accessory_core.js"></script>
+<script src="dungeon/challenge/challenge_accessory_tab.js"></script>
 
 
 
