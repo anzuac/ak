@@ -52,8 +52,7 @@
     { name: '低階潛能解放鑰匙', type: 'item', key: '低階潛能解放鑰匙', cap: 15, rate: 0.05 },
     { name: '中階潛能解放鑰匙', type: 'item', key: '中階潛能解放鑰匙', cap: 10, rate: 0.03 },
     { name: '高階潛能解放鑰匙', type: 'item', key: '高階潛能解放鑰匙', cap: 5,  rate: 0.01 },
-    { name: '怪物獎牌',       type: 'item',   key: '怪物獎牌',   cap: 50, rate: 0.05 },
-    { name: '轉職寶珠',       type: 'item',   key: '轉職寶珠',   cap: 100, rate: 0.25 }
+    { name: '怪物獎牌',       type: 'item',   key: '怪物獎牌',   cap: 50, rate: 0.05 }
   ];
 
   // ====== 狀態 ======

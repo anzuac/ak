@@ -1,29 +1,25 @@
-// dungeon_tabs_challenge.js (TicketManager + DungeonGate 版，勝利顯示實拿獎勵)
+// dungeon_tabs_challenge.js — 挑戰分頁（票券雙軌 + 進度 + 挑戰/重試/掃蕩；勝利顯示實拿）
+// ★ 與飾品試煉一致：頂部票券條（免費/背包/總計）、每副本獨立進度、挑戰下一關、挑戰上次通關、掃蕩×0.75
 (function () {
   if (!window.DungeonHub) return;
 
-  // ==== 外部依賴（安全版）====
-  var TM   = window.TicketManager;    // 統一票券（需先載入 dungeon/common/tickets.js）
+  var TM   = window.TicketManager;    // 需先載入 dungeon/common/tickets.js
   var TKEY = "ResourceTicket";
 
   if (!TM || typeof TM.getConfig !== 'function') {
-    console.error("[dungeon_tabs_challenge] TicketManager 未就緒（請確認載入順序：tickets.js → tickets_ui.js → dungeon_gate.js → hub/core → 本檔）");
+    console.error("[dungeon_tabs_challenge] TicketManager 未就緒（請確認載入順序）");
     return;
   }
-
   var CFG  = TM.getConfig(TKEY);
-  if (!CFG) {
-    console.error("[dungeon_tabs_challenge] 取不到票券設定：" + TKEY);
-    return;
-  }
+  if (!CFG) { console.error("[dungeon_tabs_challenge] 取不到票券設定：" + TKEY); return; }
 
   var LV   = window.LevelConfig;
   var DUNS = window.WaveDungeonDefs || [];
   var U    = window.WaveDungeonUtils;
 
-  // ==== 便捷函式（都走 TicketManager）====
+  // 票券雙軌
   function refillTicket(){ TM.refill(TKEY); }
-  function getTicket(){ return TM.get(TKEY); }
+  function getTicket(){ return TM.get(TKEY); } // { free:{count,cap,lastTs}, bag:{count}, total }
   function timeToNext(){ return TM.timeToNext(TKEY); }
   function fmtClock(ms){ var s=Math.floor(ms/1000), m=Math.floor(s/60), ss=s%60; return m+":"+String(ss).padStart(2,"0"); }
 
@@ -31,20 +27,32 @@
     var need = CFG.EXPAND_COST_GEM;
     var have = Number(window.player?.gem || 0);
     if (have < need) { alert(`需要 ${need} 鑽石`); return; }
-    if (!confirm(`花費 ${need} 鑽石將上限 +${CFG.EXPAND_DELTA}，並贈送 ${CFG.GIFT_ON_EXPAND} 張「${CFG.NAME}」\n是否確認？`)) return;
+    var label = (CFG.ITEM_NAME || CFG.NAME);
+    if (!confirm(`花費 ${need} 鑽石將上限 +${CFG.EXPAND_DELTA}，並贈送 ${CFG.GIFT_ON_EXPAND} 張「${label}」\n是否確認？`)) return;
     player.gem = Math.max(0, have - need);
     TM.expand(TKEY, 1);
     window.updateResourceUI?.();
-    window.logPrepend?.(`🧾 已擴充${CFG.NAME}上限至 ${TM.get(TKEY).cap}，並獲得 ${CFG.GIFT_ON_EXPAND} 張`);
+    var nowT = TM.get(TKEY);
+    window.logPrepend?.(`🧾 已擴充${CFG.NAME}上限至 ${nowT.free.cap}，並獲得 ${CFG.GIFT_ON_EXPAND} 張`);
     DungeonHub.requestRerender();
   }
 
-  // ===== 每副本等級狀態 =====
-  var levelById = {}; // { [dungeonId]: currentLevel }
-  function getLv(id){ var L = levelById[id] ?? 1; return Math.max(1, Math.min(L, LV.MAX_LEVEL)); }
-  function setLv(id, L){ levelById[id] = Math.max(1, Math.min(L|0, LV.MAX_LEVEL)); }
+  // ========= 進度存檔（每個副本各自記錄最高通關 Lv）=========
+  var PROG_KEY = "challenge_progress_v1";
+  function loadProg(){
+    try { return JSON.parse(localStorage.getItem(PROG_KEY)) || {}; }
+    catch(_) { return {}; }
+  }
+  function saveProg(p){ try { localStorage.setItem(PROG_KEY, JSON.stringify(p||{})); } catch(_){} }
+  function getMaxCleared(dId){
+    var p = loadProg(); return Math.max(0, Number(p[dId]?.maxCleared || 0));
+  }
+  function setMaxCleared(dId, lv){
+    var p = loadProg(); p[dId] = p[dId] || { maxCleared:0 };
+    if (lv > (p[dId].maxCleared||0)) { p[dId].maxCleared = lv; saveProg(p); }
+  }
 
-  // ====== 勝利後把「獎勵：」面板改成本次實際拿到 ======
+  // 勝利面板顯示「本次實拿」
   function renderGotRewards(got){
     var rw = document.getElementById("dun-rewards");
     if (!rw) return;
@@ -59,22 +67,39 @@
     }
   }
 
-  // ===== 啟動波次（單一視窗一路打完）=====
+  // 掃蕩（挑戰）：用當關最終獎勵的 0.75 倍；至少下取整
+  function sweepGrant(dDef, level){
+    var scaledView = U.scaledFinalRewardsForLevel(dDef.finalRewards, level);
+    var got = U.grantFinalRewards(scaledView, `${dDef.name}（Lv.${level}）`); // 先抽實拿
+    var out = {};
+    Object.keys(got).forEach(function(k){
+      out[k] = Math.max(0, Math.floor(got[k] * 0.75));
+    });
+    // 入庫（補差額：先扣原抽，後加回調整值 —— 簡化：直接再加 (out[k] - got[k])）
+    Object.keys(out).forEach(function(k){
+      var delta = out[k] - got[k];
+      if (delta !== 0) {
+        if (delta > 0) window.addItem?.(k, delta);
+        else window.removeItem?.(k, -delta);
+      }
+    });
+    return out;
+  }
+
+  // 跑波次（與原版相同，但勝利時升進度）
   function runGauntlet(dunDef, level, onAllFinish){
     var waves = U.buildWavesForLevel(dunDef.wavesTemplate, level);
     var total = waves.length;
     var idx = 0;
 
-    // 顯示用：最終獎勵「區間」——只用在入場前說明；真正發獎在勝利 onResult
     var scaledView = U.scaledFinalRewardsForLevel(dunDef.finalRewards, level);
-    var dispRewards = []; // 交給核心顯示區間（若你已把核心的預設渲染關掉，這個陣列可留空亦可）
+    var dispRewards = [];
     if (scaledView.gold)     dispRewards.push({ type:"text", key:"金幣 "     + U.formatRange(scaledView.gold),           qty:"" });
     if (scaledView.stone)    dispRewards.push({ type:"text", key:"強化石 "   + U.formatRange(scaledView.stone),          qty:"" });
     if (scaledView.shard)    dispRewards.push({ type:"text", key:"元素碎片 " + U.formatRange(scaledView.shard,"個"),     qty:"" });
     if (scaledView.advStone) dispRewards.push({ type:"text", key:"進階石 "   + U.formatRange(scaledView.advStone,"個"),  qty:"" });
 
-    // —— UI 與流程 hooks ——
-    var rewarded = false; // 防重複
+    var rewarded = false;
     var hooks = {
       onRender: function(){
         var el = document.getElementById("dun-result");
@@ -100,25 +125,26 @@
           ctx.api.log(`➡️ 進入第 ${idx+1}/${total} 波（${next.label}）`);
         }
       },
-      // ★ 勝利當下就抽獎 + 入庫 + 改面板顯示成「本次實拿」
       onResult: function({ ctx, state }){
         if (state === "win" && !rewarded){
           rewarded = true;
           var got = U.grantFinalRewards(scaledView, `${dunDef.name}（Lv.${level}）`);
           renderGotRewards(got);
+          // 升進度
+          setMaxCleared(dunDef.id, level);
         }
       }
     };
 
-    // finishUI 保留按鈕，但再次點擊不會重複發獎
     var finishUI = {
       isFinal: true,
       claimLabel: "領取獎勵",
       onClaim: function(){
-        if (rewarded) return; // 已經發過就略過
+        if (rewarded) return;
         rewarded = true;
         var got = U.grantFinalRewards(scaledView, `${dunDef.name}（Lv.${level}）`);
         renderGotRewards(got);
+        setMaxCleared(dunDef.id, level);
       }
     };
 
@@ -127,7 +153,7 @@
       title: `${dunDef.name} — ${first.label}（Lv.${level}）`,
       monster: first.monster,
       timeLimitSec: dunDef.timeLimitSec || 0,
-      rewards: dispRewards,     // 只是顯示區間；真正數字在 onResult
+      rewards: dispRewards,
       hooks: hooks,
       finishUI: finishUI,
       onFinish: function(res){
@@ -141,72 +167,83 @@
     refillTicket();
     var t = getTicket();
     var left = timeToNext();
-    var leftTxt = (t.count >= t.cap) ? "已滿" : ("+"+fmtClock(left));
+    var leftTxt = (t.free.count >= t.free.cap) ? "已滿" : ("+"+fmtClock(left));
+    var label = (CFG.ITEM_NAME || CFG.NAME);
+
     return `
       <div style="border:1px solid #243247;background:#0b1220;border-radius:10px;padding:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <div style="font-size:14px">
-          <b>${CFG.NAME}</b>：<span style="font-weight:800">${t.count}</span> / ${t.cap}
-          <span style="font-size:12px;opacity:.8;margin-left:6px;">（每 30 分復原 1）</span>
+        <div style="font-size:12px;line-height:1.6">
+          <div>
+            <b>${CFG.NAME}</b>（免費）：<span style="font-weight:800">${t.free.count}</span> / ${t.free.cap}
+            <span style="font-size:12px;opacity:.8;margin-left:6px;">（每 30 分復原 1）</span>
+            <span style="margin-left:8px;opacity:.9;">下次回復：${leftTxt}</span>
+          </div>
+          <div>背包：<b>${t.bag.count}</b>　總計：<b>${t.total}</b></div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <div style="font-size:12px;opacity:.9">下次回復：${leftTxt}</div>
           <button id="btnExpandTicket" style="padding:6px 10px;border:0;border-radius:8px;background:#6b21a8;color:#fff;cursor:pointer">
-            擴充上限（-${CFG.EXPAND_COST_GEM}💎 / +${CFG.EXPAND_DELTA}）+ 贈${CFG.GIFT_ON_EXPAND}
+            擴充上限（-${CFG.EXPAND_COST_GEM}💎 / +${CFG.EXPAND_DELTA}）+ 贈${CFG.GIFT_ON_EXPAND}張${label}
           </button>
         </div>
       </div>
     `;
   }
 
-  function cardHTML(d, L){
-    var scaled = U.scaledFinalRewardsForLevel(d.finalRewards, L);
-    var goldTxt  = U.formatRange(scaled.gold);
-    var stoneTxt = U.formatRange(scaled.stone);
-    var shardTxt = U.formatRange(scaled.shard,"個");
-    var advTxt   = U.formatRange(scaled.advStone,"個");
+  function cardHTML(d){
+    var maxCleared = getMaxCleared(d.id);
+    var nextLv = Math.min((maxCleared + 1), LV.MAX_LEVEL);
 
-    var waves = U.buildWavesForLevel(d.wavesTemplate, L);
+    var scaled = U.scaledFinalRewardsForLevel(d.finalRewards, nextLv);
+    var rewardLines = [];
+    if (scaled.gold)     rewardLines.push(`・金幣：${U.formatRange(scaled.gold)}`);
+    if (scaled.stone)    rewardLines.push(`・強化石：${U.formatRange(scaled.stone)}`);
+    if (scaled.shard)    rewardLines.push(`・元素碎片：${U.formatRange(scaled.shard,"個")}`);
+    if (scaled.advStone) rewardLines.push(`・進階石：${U.formatRange(scaled.advStone,"個")}`);
+    if (rewardLines.length === 0) rewardLines.push(`・—`);
+
+    var waves = U.buildWavesForLevel(d.wavesTemplate, nextLv);
     var boss  = waves[waves.length-1].monster;
     var atk   = (boss.atk||1).toLocaleString();
     var def   = (boss.def||0).toLocaleString();
     var hp    = (boss.hp||1).toLocaleString();
 
-    var rewardLines = [];
-    if (scaled.gold)     rewardLines.push(`・金幣：${goldTxt}`);
-    if (scaled.stone)    rewardLines.push(`・強化石：${stoneTxt}`);
-    if (scaled.shard)    rewardLines.push(`・元素碎片：${shardTxt}`);
-    if (scaled.advStone) rewardLines.push(`・進階石：${advTxt}`);
-    if (rewardLines.length === 0) rewardLines.push(`・—`);
+    var consumeLabel = (CFG.ITEM_NAME || CFG.NAME);
+
+    var retryBtn = (maxCleared>0)
+      ? `<button class="btn-ch-retry" data-id="${d.id}" data-level="${maxCleared}" style="padding:8px 12px;border:0;border-radius:8px;background:#4b5563;color:#fff;cursor:pointer">挑戰上次通關（Lv.${maxCleared}）</button>`
+      : '';
+
+    var sweepBtn = (maxCleared>0)
+      ? `<button class="btn-ch-sweep" data-id="${d.id}" data-level="${maxCleared}" style="padding:8px 12px;border:0;border-radius:8px;background:#1f2937;color:#fff;cursor:pointer">掃蕩（以 Lv.${maxCleared} 計 / ×0.75）</button>`
+      : '';
 
     return `
-      <div style="border:1px solid #2b344a;background:#0b1220;border-radius:10px;padding:10px">
+      <div class="ch-card" data-id="${d.id}" style="border:1px solid #2b344a;background:#0b1220;border-radius:10px;padding:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <div style="font-weight:800">${d.name}</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button class="btn-lv-dec" data-id="${d.id}" style="padding:4px 8px;border-radius:8px;border:0;background:#1f2937;color:#fff;cursor:pointer">◀</button>
-            <div class="lv-label" data-id="${d.id}" style="min-width:64px;text-align:center;font-size:12px;">Lv.${L}</div>
-            <button class="btn-lv-inc" data-id="${d.id}" style="padding:4px 8px;border-radius:8px;border:0;background:#1f2937;color:#fff;cursor:pointer">▶</button>
-          </div>
+          <div class="ch-level" style="font-size:12px;">最高通關：<b>${maxCleared}</b> / ${LV.MAX_LEVEL}　下一關：<b>Lv.${nextLv}</b></div>
         </div>
 
         <div style="opacity:.9;font-size:12px;margin:6px 0 8px">${d.desc || ""}</div>
 
         <div style="font-size:12px;opacity:.95;line-height:1.8">
-          <div>最終波敵人能力：</div>
+          <div>最終波敵人能力（以下一關預覽）：</div>
           <div>・攻擊力：${atk}</div>
           <div>・防禦力：${def}</div>
           <div>・生命值：${hp}</div>
         </div>
 
         <div style="font-size:12px;opacity:.95;line-height:1.8;margin-top:6px">
-          <div>最終獎勵（按 Lv 放大）</div>
+          <div>最終獎勵（以下一關預覽）</div>
           ${rewardLines.join("<br>")}
         </div>
 
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-          <button class="btn-start" data-id="${d.id}" style="padding:8px 12px;border:0;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer">
-            開始挑戰（消耗：${CFG.NAME} ×1）
+          <button class="btn-ch-start" data-id="${d.id}" data-level="${nextLv}" style="padding:8px 12px;border:0;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer">
+            挑戰下一關（消耗：${consumeLabel} ×1）
           </button>
+          ${retryBtn}
+          ${sweepBtn}
         </div>
       </div>
     `;
@@ -219,61 +256,88 @@
     render: function(container){
       refillTicket();
 
-      // 初始化各副本等級（預設 Lv.1）
-      for (var i=0;i<DUNS.length;i++){
-        if (levelById[DUNS[i].id] == null) levelById[DUNS[i].id] = 1;
-      }
-
       container.innerHTML = `
         ${headerHTML()}
         <div style="display:grid;gap:10px;margin-top:10px">
-          ${DUNS.map(function(d){ return cardHTML(d, getLv(d.id)); }).join("")}
+          ${DUNS.map(function(d){ return cardHTML(d); }).join("")}
         </div>
       `;
 
-      // 擴充按鈕
       var exBtn = container.querySelector('#btnExpandTicket');
       if (exBtn) exBtn.onclick = tryExpandCap;
 
-      function refreshAll(){ DungeonHub.requestRerender(); }
+      function rerender(){ DungeonHub.requestRerender(); }
 
-      // 等級調整
-      var decs = container.querySelectorAll('.btn-lv-dec');
-      var incs = container.querySelectorAll('.btn-lv-inc');
-      for (var i=0;i<decs.length;i++){
-        decs[i].onclick = function(){
+      // 開始（下一關）
+      container.querySelectorAll('.btn-ch-start').forEach(function(btn){
+        btn.onclick = function(){
           var id = this.getAttribute('data-id');
-          setLv(id, getLv(id)-1);
-          refreshAll();
-        };
-      }
-      for (var j=0;j<incs.length;j++){
-        incs[j].onclick = function(){
-          var id = this.getAttribute('data-id');
-          setLv(id, getLv(id)+1);
-          refreshAll();
-        };
-      }
-
-      // 開始挑戰：透過 DungeonGate 統一檢查主戰鬥是否已停止
-      DungeonGate.bindButtons('.btn-start', function(btn){
-        return function(){
-          var id = btn.getAttribute('data-id');
+          var level = Number(this.getAttribute('data-level'));
           var d  = DUNS.find(function(x){ return x.id===id; });
           if (!d) return;
 
           refillTicket();
-          if (!TM.canSpend(TKEY, 1)) { alert(`需要 ${CFG.NAME} ×1`); return; }
+          if (!TM.canSpend(TKEY, 1)) {
+            var needLabel = (CFG.ITEM_NAME || CFG.NAME);
+            alert(`需要 ${needLabel} ×1`); return;
+          }
 
-          var L = getLv(id);
           DungeonHub.close();
+          runGauntlet(d, level, function(state){
+            if (state === "win") {
+              TM.spend(TKEY, 1);
+              setMaxCleared(d.id, level);
+              window.saveGame?.();
+            }
+          });
+        };
+      });
 
-          runGauntlet(d, L, function(state){
+      // 重試（最高通關）
+      container.querySelectorAll('.btn-ch-retry').forEach(function(btn){
+        btn.onclick = function(){
+          var id = this.getAttribute('data-id');
+          var level = Number(this.getAttribute('data-level'));
+          var d  = DUNS.find(function(x){ return x.id===id; });
+          if (!d) return;
+
+          if (!TM.canSpend(TKEY, 1)) {
+            var needLabel = (CFG.ITEM_NAME || CFG.NAME);
+            alert(`需要 ${needLabel} ×1`); return;
+          }
+
+          DungeonHub.close();
+          runGauntlet(d, level, function(state){
             if (state === "win") {
               TM.spend(TKEY, 1);
               window.saveGame?.();
             }
           });
+        };
+      });
+
+      // 掃蕩（最高通關 ×0.75）
+      container.querySelectorAll('.btn-ch-sweep').forEach(function(btn){
+        btn.onclick = function(){
+          var id = this.getAttribute('data-id');
+          var level = Number(this.getAttribute('data-level'));
+          var d  = DUNS.find(function(x){ return x.id===id; });
+          if (!d) return;
+
+          if (!TM.canSpend(TKEY, 1)) {
+            var needLabel = (CFG.ITEM_NAME || CFG.NAME);
+            alert(`需要 ${needLabel} ×1`); return;
+          }
+
+          var got = sweepGrant(d, level);
+          TM.spend(TKEY, 1);
+          window.saveGame?.();
+
+          var parts = Object.keys(got||{}).map(function(k){ return k+"×"+got[k].toLocaleString(); });
+          window.logPrepend?.("⏩ 掃蕩成功（挑戰 "+d.name+" Lv."+level+"）：獲得 "+ (parts.join("、")||"—"));
+          alert("掃蕩獲得：\n" + (parts.join("\n") || "—"));
+
+          rerender();
         };
       });
     }

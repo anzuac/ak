@@ -64,7 +64,7 @@
         { label: "Wave 2", monster: { name: "流影靈核", atk: 168, def: 100,  hp: 6900,  aps: 1.0 } },
         { label: "Wave 3", monster: { name: "耀晶靈核", atk: 262, def: 146,  hp: 10300, aps: 1.5 } }
       ],
-      finalRewards: { shard: [1, 12] }     // 只掉元素碎片
+      finalRewards: { shard: [1, 5] }     // 只掉元素碎片
     },
     {
       id: "adv_stone_rush",
@@ -76,7 +76,7 @@
         { label: "Wave 2", monster: { name: "高壓晶核", atk: 77,  def: 160, hp: 12000, aps: 0.9 } },
         { label: "Wave 3", monster: { name: "究極晶核", atk: 220, def: 220, hp: 18000, aps: 2.0 } }
       ],
-      finalRewards: { advStone: [1, 14] }  // 只掉進階石（需要 addItem("進階石", n) 支援）
+      finalRewards: { advStone: [1, 5] }  // 只掉進階石（需要 addItem("進階石", n) 支援）
     }
   ];
 
