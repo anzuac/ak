@@ -1,192 +1,317 @@
-// === inventory.js ===
+// === inventory.js — 分頁分類 + 自動分類版 ===
+//
+// 1) 分頁：藥水、票券、強化類、素材
+// 2) 自動依名稱分類（掉落自動進背包就會顯示在對應分頁）
+// 3) 兼容舊 API：addItem / removeItem / getItemQuantity / createInventoryDropdown
+// 4) 可用 setItemCategory 覆寫分類
+// 5) UI 一次初始化，之後只刷新清單；數量變更自動 saveGame?.()
 
-// 初始化背包資料
+// 初始背包資料（可依需求調整；不填也行）
 const inventory = {
   "任務獎牌": 0,
   "衝星石": 0,
-  "進階石": 0,
-  "星之碎片": 0,
-  "怪物獎牌": 0,
-  "sp點數券":10,
+  "飾品突破石": 10000,
+  "飾品星力強化石": 10000,
+  "飾品強化石": 10000,
+  "sp點數券": 10,
   "元素碎片": 0,
   "精華": 0,
   "技能強化券": 1
 };
 
-// 顯示背包彈窗
+// 類別定義（鍵：代號；值：顯示）
+const CATEGORIES = {
+  potion:  "藥水",
+  ticket:  "票券",
+  enhance: "強化類",
+  material:"素材",
+};
+const CATEGORY_ORDER = ["potion", "ticket", "enhance", "material"];
+
+// —— 自動分類規則（優先順序由上到下） ——
+// 符合任一 regex 即套用該類別；沒命中則歸「素材」
+const AUTO_RULES = [
+  // 藥水 / 回復品
+  { cat: "potion",  re: /(藥|藥水|藥劑|回復|恢復|治療|HP|MP|補血|補魔)/i },
+
+  // 票券
+  { cat: "ticket",  re: /(券|票|憑證|卷|ticket)/i },
+
+  // 強化類
+  { cat: "enhance", re: /(強化|突破|星力|衝星|升級|精鍊|精煉|鍛造|強化石|升級石|寶珠|符文|附魔)/i },
+
+  // 素材
+  { cat: "material", re: /(素材|材料|碎片|結晶|精華|礦|石|木|皮|骨|毛)/i },
+];
+
+// 道具 → 類別對照表（手動覆寫／快取結果用）
+const ITEM_META = {
+  // 先放已知（可省略，靠自動分類即可）
+  "sp點數券": { cat: "ticket" },
+  "技能強化券": { cat: "ticket" },
+  "衝星石": { cat: "enhance" },
+  "飾品突破石": { cat: "enhance" },
+  "飾品星力強化石": { cat: "enhance" },
+  "飾品強化石": { cat: "enhance" },
+  "元素碎片": { cat: "material" },
+  "精華":     { cat: "material" },
+  "任務獎牌": { cat: "material" },
+};
+
+// 分頁中即使為 0 也強制顯示的項目（避免玩家誤以為沒有此類）
+const ALWAYS_SHOW = {
+  potion:   [],
+  ticket:   ["sp點數券", "技能強化券"],
+  enhance:  ["飾品強化石", "飾品突破石", "飾品星力強化石", "衝星石"],
+  material: ["任務獎牌", "元素碎片", "精華"],
+};
+
+// —— 工具：分類 ——
+
+// 自動依名稱判斷類別；沒命中則 material
+function autoCategoryByName(name) {
+  for (const rule of AUTO_RULES) {
+    if (rule.re.test(String(name))) return rule.cat;
+  }
+  return "material";
+}
+
+// 取得道具類別：有手動→用手動；沒有→計算後快取
+function getItemCategory(name) {
+  const cfg = ITEM_META[name];
+  if (cfg && CATEGORIES[cfg.cat]) return cfg.cat;
+  const cat = autoCategoryByName(name);
+  ITEM_META[name] = { cat }; // 快取結果，之後更快
+  return cat;
+}
+
+// 手動覆寫類別
+function setItemCategory(name, cat) {
+  if (!CATEGORIES[cat]) cat = "material";
+  ITEM_META[name] = ITEM_META[name] || {};
+  ITEM_META[name].cat = cat;
+  refreshInventoryUI();
+}
+
+// —— UI：背包彈窗 —— //
+
 function openInventoryModal() {
   if (document.getElementById("inventoryModal")) return;
-  
-  // 背景
-  var backdrop = document.createElement("div");
+
+  const backdrop = document.createElement("div");
   backdrop.id = "inventoryBackdrop";
   Object.assign(backdrop.style, {
-    position: "fixed", top: "0", left: "0", width: "100vw", height: "100vh",
+    position: "fixed", inset: "0",
     background: "rgba(0,0,0,0.5)", zIndex: "999"
   });
 
-  // 外殼
-  var modal = document.createElement("div");
+  const modal = document.createElement("div");
   modal.id = "inventoryModal";
   Object.assign(modal.style, {
     position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-    backgroundColor: "#222", padding: "0", border: "1px solid #888",
-    borderRadius: "8px", zIndex: "1000", minWidth: "240px", color: "#fff",
-    maxHeight: "70vh", overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,.4)"
+    backgroundColor: "#111827", padding: "0", border: "1px solid #334155",
+    borderRadius: "12px", zIndex: "1000", minWidth: "320px", color: "#e5e7eb",
+    maxHeight: "75vh", overflow: "hidden", boxShadow: "0 12px 36px rgba(0,0,0,.5)"
   });
 
-  // 頂部列（sticky）
-  var header = document.createElement("div");
+  const header = document.createElement("div");
   Object.assign(header.style, {
-    position: "sticky", top: "0", background: "#1a1a1a", borderBottom: "1px solid #444",
-    padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: "2"
+    position: "sticky", top: "0", background: "#0f172a", borderBottom: "1px solid #334155",
+    padding: "10px 12px", display: "flex", alignItems: "center",
+    justifyContent: "space-between", zIndex: "2"
   });
-
-  var title = document.createElement("div");
-  title.textContent = "背包道具";
-  Object.assign(title.style, { margin: "0", fontSize: "14px", fontWeight: "700" });
-
-  var closeIcon = document.createElement("button");
-  closeIcon.textContent = "✖";
-  Object.assign(closeIcon.style, {
-    border: "none", background: "transparent", color: "#fff", fontSize: "16px", cursor: "pointer"
+  const title = document.createElement("div");
+  title.textContent = "背包";
+  Object.assign(title.style, { fontSize: "14px", fontWeight: "800", letterSpacing: ".5px" });
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "✖";
+  Object.assign(closeBtn.style, {
+    border: "none", background: "#334155", color: "#fff",
+    padding: "6px 10px", borderRadius: "8px", cursor: "pointer"
   });
-  closeIcon.onclick = function () {
-    if (modal.parentNode) document.body.removeChild(modal);
-    if (backdrop.parentNode) document.body.removeChild(backdrop);
-  };
-
-  header.appendChild(title);
-  header.appendChild(closeIcon);
+  closeBtn.onclick = () => { modal.remove(); backdrop.remove(); };
+  header.appendChild(title); header.appendChild(closeBtn);
   modal.appendChild(header);
 
-  // 清單（可滑動）
-  var list = document.createElement("div");
-  list.id = "inventoryList";
-  Object.assign(list.style, {
-    maxHeight: "55vh", overflowY: "auto", WebkitOverflowScrolling: "touch",
-    padding: "10px 12px 12px 12px", gap: "6px"
+  const tabs = document.createElement("div");
+  Object.assign(tabs.style, {
+    display: "flex", gap: "8px", padding: "8px 12px",
+    background: "#0b1220", borderBottom: "1px solid #1f2937", flexWrap: "wrap"
   });
+  modal.appendChild(tabs);
 
-  updateInventoryList(list);
-  modal.appendChild(list);
+  const listWrap = document.createElement("div");
+  Object.assign(listWrap.style, {
+    padding: "10px 12px 12px 12px",
+    maxHeight: "58vh", overflow: "auto"
+  });
+  modal.appendChild(listWrap);
 
-  // 底部操作列（可選）
-  var footer = document.createElement("div");
+  const footer = document.createElement("div");
   Object.assign(footer.style, {
-    position: "sticky", bottom: "0", background: "#1a1a1a", borderTop: "1px solid #444",
+    background: "#0f172a", borderTop: "1px solid #334155",
     padding: "8px 12px", display: "flex", justifyContent: "flex-end", gap: "8px"
   });
-
-  var closeBtn = document.createElement("button");
-  closeBtn.textContent = "關閉";
-  Object.assign(closeBtn.style, {
-    border: "none", borderRadius: "6px", padding: "6px 10px", background: "#555",
-    color: "#fff", cursor: "pointer"
+  const okBtn = document.createElement("button");
+  okBtn.textContent = "關閉";
+  Object.assign(okBtn.style, {
+    border: "none", borderRadius: "8px", padding: "6px 10px",
+    background: "#475569", color: "#fff", cursor: "pointer"
   });
-  closeBtn.onclick = closeIcon.onclick;
-
-  footer.appendChild(closeBtn);
+  okBtn.onclick = closeBtn.onclick;
+  footer.appendChild(okBtn);
   modal.appendChild(footer);
 
-  backdrop.onclick = function (e) {
-    if (e.target === backdrop) closeIcon.onclick();
-  };
+  let activeCat = CATEGORY_ORDER[0];
+
+  function renderTabs() {
+    tabs.innerHTML = "";
+    CATEGORY_ORDER.forEach(cat => {
+      const b = document.createElement("button");
+      b.textContent = CATEGORIES[cat];
+      Object.assign(b.style, {
+        background: (cat === activeCat ? "#1d4ed8" : "#1f2937"),
+        color: "#fff", border: "0", padding: "6px 10px",
+        borderRadius: "8px", cursor: "pointer", fontWeight: "600"
+      });
+      b.onclick = () => { activeCat = cat; renderTabs(); renderList(); };
+      tabs.appendChild(b);
+    });
+  }
+
+  function makeRow(name, count) {
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      display: "grid", gridTemplateColumns: "1fr auto", gap: "6px",
+      padding: "8px 0", borderBottom: "1px dashed #263043", alignItems: "center"
+    });
+    const left = document.createElement("div"); left.textContent = name;
+    const right = document.createElement("div"); right.textContent = "× " + Number(count||0).toLocaleString();
+    Object.assign(right.style, { opacity: ".9" });
+    row.appendChild(left); row.appendChild(right);
+    return row;
+  }
+
+  function renderList() {
+    listWrap.innerHTML = "";
+
+    const mustSet = new Set(ALWAYS_SHOW[activeCat] || []);
+    const items = [];
+    for (const name in inventory) {
+      if (getItemCategory(name) !== activeCat) continue;
+      const n = inventory[name] || 0;
+      if (n > 0 || mustSet.has(name)) items.push([name, n]);
+    }
+
+    items.sort((a, b) => {
+      const da = (b[1] > 0) - (a[1] > 0); // 有數量優先
+      if (da !== 0) return da;
+      return String(a[0]).localeCompare(String(b[0]), "zh-Hant");
+    });
+
+    if (items.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "（此分頁尚無道具）";
+      Object.assign(empty.style, { opacity: ".7", padding: "8px 2px" });
+      listWrap.appendChild(empty);
+      return;
+    }
+
+    for (const [name, n] of items) listWrap.appendChild(makeRow(name, n));
+  }
+
+  modal._inv = { refresh: renderList };
+  backdrop.onclick = (e) => { if (e.target === backdrop) closeBtn.onclick(); };
 
   document.body.appendChild(backdrop);
   document.body.appendChild(modal);
+
+  renderTabs(); renderList();
 }
 
-// 更新背包顯示內容
-function updateInventoryList(container) {
-  container.innerHTML = "";
-
-  var alwaysShow = [
-    "任務獎牌", "衝星石", "進階石", "星之碎片", "洗鍊石", "低階潛能解放鑰匙",
-    "元素碎片", "元素精華"
-  ];
-  var set = {};
-  var k;
-  for (k in inventory) set[k] = true;
-  for (var i = 0; i < alwaysShow.length; i++) set[alwaysShow[i]] = true;
-
-  for (k in set) {
-    var count = inventory[k] || 0;
-    var must = false;
-    for (var j = 0; j < alwaysShow.length; j++) {
-      if (alwaysShow[j] === k) { must = true; break; }
-    }
-    if (count <= 0 && !must) continue;
-
-    var row = document.createElement("div");
-    row.textContent = k + " × " + count;
-    row.style.padding = "6px 0";
-    row.style.borderBottom = "1px dashed #333";
-    container.appendChild(row);
-  }
+function refreshInventoryUI() {
+  const modal = document.getElementById("inventoryModal");
+  modal?._inv?.refresh?.();
 }
 
-// 增加道具數量
+// —— 公用 API ——
+
+// 新增道具（自動分類）
 function addItem(name, amount) {
   if (amount === void 0) amount = 1;
   if (!inventory[name]) inventory[name] = 0;
-  inventory[name] += amount;
-  var list = document.getElementById("inventoryList");
-  if (list) updateInventoryList(list);
 
-  // ✅ 新增：當道具數量改變時，自動存檔
+  // 若未有手動設定則自動判斷分類並快取
+  if (!ITEM_META[name]) {
+    ITEM_META[name] = { cat: autoCategoryByName(name) };
+  }
+
+  inventory[name] += amount;
+  refreshInventoryUI();
   saveGame?.();
 }
 
-// 取得指定道具數量
-function getItemQuantity(name) {
-  return inventory[name] || 0;
-}
+// 取得數量
+function getItemQuantity(name) { return inventory[name] || 0; }
 
-// 扣除道具數量
+// 扣除道具
 function removeItem(name, amount) {
   if (amount === void 0) amount = 1;
   if (!inventory[name]) inventory[name] = 0;
   inventory[name] = Math.max(inventory[name] - amount, 0);
-  var list = document.getElementById("inventoryList");
-  if (list) updateInventoryList(list);
-
-  // ✅ 新增：當道具數量改變時，自動存檔
+  refreshInventoryUI();
   saveGame?.();
 }
 
-// 產生背包道具的下拉式選單（支援強制顯示）
-function createInventoryDropdown(selectId, includeZeroItems) {
+// 產生下拉選單（可指定分類）
+function createInventoryDropdown(selectId, includeZeroItems, categoryFilter) {
   if (includeZeroItems === void 0) includeZeroItems = false;
-  var select = document.getElementById(selectId);
+  const select = typeof selectId === "string" ? document.getElementById(selectId) : selectId;
   if (!select) return;
 
-  var alwaysInclude = ["森林精華", "沼澤精華", "熔岩精華", "核心精華"];
-  var set = {};
-  var k;
-  for (k in inventory) set[k] = true;
-  for (var i = 0; i < alwaysInclude.length; i++) set[alwaysInclude[i]] = true;
+  // 允許顯示名/代號
+  let catKey = null;
+  if (categoryFilter) {
+    if (CATEGORIES[categoryFilter]) catKey = categoryFilter;
+    else for (const k in CATEGORIES) if (CATEGORIES[k] === categoryFilter) { catKey = k; break; }
+  }
 
-  select.innerHTML = ""; // 清空原選項
+  // 強制包含（所有分類）
+  const alwaysInclude = new Set();
+  for (const c in ALWAYS_SHOW) for (const n of ALWAYS_SHOW[c]) alwaysInclude.add(n);
 
-  for (k in set) {
-    var count = inventory[k] || 0;
-    var must = false;
-    for (var j = 0; j < alwaysInclude.length; j++) {
-      if (alwaysInclude[j] === k) { must = true; break; }
-    }
-    if (count <= 0 && !includeZeroItems && !must) continue;
+  select.innerHTML = "";
+  const entries = [];
+  for (const name in inventory) {
+    const cat = getItemCategory(name);
+    if (catKey && cat !== catKey) continue;
+    const count = inventory[name] || 0;
+    if (count <= 0 && !includeZeroItems && !alwaysInclude.has(name)) continue;
+    entries.push([name, count]);
+  }
 
-    var option = document.createElement("option");
-    option.value = k;
-    option.textContent = k + " (" + count + ")";
-    select.appendChild(option);
+  entries.sort((a, b) => {
+    const da = (b[1] > 0) - (a[1] > 0);
+    if (da !== 0) return da;
+    return String(a[0]).localeCompare(String(b[0]), "zh-Hant");
+  });
+
+  for (const [name, count] of entries) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = `${name} (${Number(count).toLocaleString()})`;
+    select.appendChild(opt);
   }
 }
 
-// ✅ 讓核心模組能存取到 inventory 物件及相關函式
+// 對外暴露
 window.inventory = inventory;
 window.addItem = addItem;
 window.getItemQuantity = getItemQuantity;
 window.removeItem = removeItem;
 window.createInventoryDropdown = createInventoryDropdown;
+window.openInventoryModal = openInventoryModal;
+
+// 類別相關（可選覆寫）
+window.getItemCategory = getItemCategory;
+window.setItemCategory = setItemCategory;

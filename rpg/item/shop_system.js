@@ -1,7 +1,8 @@
 // =======================
-// shop_system.js
+// shop_system.js (stable)
 // 支援：1) 原本彈窗 openShopModal()  2) 掛到 ShopHub 分頁（自動偵測並註冊）
 // 新增：轉職寶珠交易（買：50,000 楓幣；賣：40,000 楓幣）
+// 修正：避免反覆重建導致輸入被清空；ShopHub 容器非 HTMLElement 時不會空白
 // =======================
 
 (function (w) {
@@ -88,7 +89,8 @@
     const btn = document.getElementById("shopCloseBtn");
     if (btn) btn.onclick = closeShop;
 
-    renderShopItems(body); // ← 改：改成傳入容器
+    renderShopItems(body);             // 初始化一次
+    body._shop?.refreshAll?.();        // 顯示時做一次輕量刷新（不會重建 DOM）
   }
 
   function closeShop() {
@@ -126,32 +128,45 @@
     return btn;
   }
 
-  // --- 主渲染（可接任何容器；彈窗/Hub 共用） ---
+  // --- 主渲染（只初始化一次；之後僅 refresh，不整體重建） ---
   function renderShopItems(container) {
-    // 允許舊用法（找 #shopItems）
     if (!container) {
       container = document.getElementById("shopItems");
       if (!container) return;
     }
+
+    // 避免使用 dataset（有些容器不是 HTMLElement 會報錯）
+    if (container._shopInit) return;
+    container._shopInit = true;
+
     container.innerHTML = "";
+
+    // 統一收集各區塊的 refresh
+    const refreshers = [];
 
     // ==== 強化石商店（數量輸入 + 折扣）====
     (function renderStoneShop(){
       const unitPrice = 5; // 5 楓幣/顆
 
       const wrap = document.createElement("div");
-
       const box = document.createElement("div");
       box.style.cssText = "border:1px solid #2f3555;border-radius:8px;padding:10px;background:#161a24;color:#eaf0ff;";
 
       const row = document.createElement("div");
       row.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;";
-      row.innerHTML = `
-        <label>購買數量：</label>
-        <input id="stoneQtyInput" type="number" min="1" step="1" value="1"
-              style="width:140px;padding:6px;border-radius:6px;border:1px solid #3b426b;background:#0f1320;color:#eaf0ff;">
-        <span id="stonePriceText" style="margin-left:6px;opacity:.9"></span>
-      `;
+
+      const lbl = document.createElement("label");
+      lbl.textContent = "購買數量：";
+      const qtyInput = document.createElement("input");
+      qtyInput.type = "number"; qtyInput.min = "1"; qtyInput.step = "1"; qtyInput.value = "1";
+      qtyInput.style.cssText = "width:140px;padding:6px;border-radius:6px;border:1px solid #3b426b;background:#0f1320;color:#eaf0ff;";
+
+      const priceText = document.createElement("span");
+      priceText.style.cssText = "margin-left:6px;opacity:.9";
+
+      row.appendChild(lbl);
+      row.appendChild(qtyInput);
+      row.appendChild(priceText);
       box.appendChild(row);
 
       const tip = p("定價：5 楓幣/顆；滿 1,000 顆 95 折，滿 10,000 顆 9 折。", true);
@@ -160,7 +175,6 @@
 
       const buyBtn = niceBtn("購買", "#5b8cff");
       box.appendChild(buyBtn);
-
       wrap.appendChild(box);
 
       function calcStonePrice(qty) {
@@ -170,12 +184,13 @@
         else price = Math.floor(price);
         return price;
       }
-
-      const qtyInput = box.querySelector("#stoneQtyInput");
-      const priceText = box.querySelector("#stonePriceText");
+      function safeQty() {
+        let q = parseInt(qtyInput.value, 10);
+        if (!Number.isFinite(q) || q < 1) q = 1;
+        return q;
+      }
       function refreshPrice() {
-        let qty = parseInt(qtyInput.value, 10);
-        if (!Number.isFinite(qty) || qty < 1) qty = 1;
+        const qty = safeQty();
         const price = calcStonePrice(qty);
         priceText.innerHTML = `應付：<b>${price.toLocaleString()}</b> 楓幣（${qty.toLocaleString()} 顆）`;
       }
@@ -183,20 +198,21 @@
       refreshPrice();
 
       buyBtn.onclick = () => {
-        let qty = parseInt(qtyInput.value, 10);
-        if (!Number.isFinite(qty) || qty < 1) qty = 1;
+        const qty = safeQty();
         const price = calcStonePrice(qty);
         if ((w.player?.gold || 0) >= price) {
           w.player.gold -= price;
           w.player.stone = (w.player.stone || 0) + qty;
           w.logPrepend?.(`🪨 成功購買 ${qty.toLocaleString()} 顆強化石！花費 ${price.toLocaleString()} 楓幣`);
           w.updateResourceUI?.();
+          refreshPrice(); // 價格區塊維持正確
         } else {
           alert("楓幣不足！");
         }
       };
 
       container.appendChild(sectionCard("💎 強化石商店", wrap));
+      refreshers.push(refreshPrice); // 輕量刷新（不重建 DOM）
     })();
 
     // ==== 轉職寶珠 交易（買/賣）====
@@ -222,28 +238,36 @@
       // 買入
       const buyRow = document.createElement("div");
       buyRow.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;";
-      buyRow.innerHTML = `
-        <span>購買數量：</span>
-        <input id="orbBuyQty" type="number" min="1" step="1" value="1"
-               style="width:120px;padding:6px;border-radius:6px;border:1px solid #3b426b;background:#0f1320;color:#eaf0ff;">
-        <span class="price"></span>
-      `;
+
+      const buyLbl = document.createElement("span");
+      buyLbl.textContent = "購買數量：";
+      const buyInput = document.createElement("input");
+      buyInput.type = "number"; buyInput.min = "1"; buyInput.step = "1"; buyInput.value = "1";
+      buyInput.style.cssText = "width:120px;padding:6px;border-radius:6px;border:1px solid #3b426b;background:#0f1320;color:#eaf0ff;";
+      const buyPriceText = document.createElement("span");
+
+      buyRow.appendChild(buyLbl);
+      buyRow.appendChild(buyInput);
+      buyRow.appendChild(buyPriceText);
+
       const buyBtn = niceBtn(`購買（${BUY_PRICE.toLocaleString()}／顆）`, "#4a78ff");
       box.appendChild(buyRow);
       box.appendChild(buyBtn);
 
-      const buyInput = buyRow.querySelector("#orbBuyQty");
-      const buyPriceText = buyRow.querySelector(".price");
-      function refreshBuyPrice() {
+      function buyQty() {
         let q = parseInt(buyInput.value, 10);
         if (!Number.isFinite(q) || q < 1) q = 1;
+        return q;
+      }
+      function refreshBuyPrice() {
+        const q = buyQty();
         buyPriceText.innerHTML = `應付：<b>${(q*BUY_PRICE).toLocaleString()}</b> 楓幣`;
       }
       buyInput.addEventListener("input", refreshBuyPrice);
       refreshBuyPrice();
 
       buyBtn.onclick = () => {
-        let q = parseInt(buyInput.value, 10); if (!Number.isFinite(q) || q < 1) q = 1;
+        const q = buyQty();
         const cost = q * BUY_PRICE;
         if ((w.player?.gold || 0) < cost) { alert("楓幣不足！"); return; }
         w.player.gold -= cost;
@@ -256,28 +280,36 @@
       // 賣出
       const sellRow = document.createElement("div");
       sellRow.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;";
-      sellRow.innerHTML = `
-        <span>賣出數量：</span>
-        <input id="orbSellQty" type="number" min="1" step="1" value="1"
-               style="width:120px;padding:6px;border-radius:6px;border:1px solid #3b426b;background:#0f1320;color:#eaf0ff;">
-        <span class="price"></span>
-      `;
+
+      const sellLbl = document.createElement("span");
+      sellLbl.textContent = "賣出數量：";
+      const sellInput = document.createElement("input");
+      sellInput.type = "number"; sellInput.min = "1"; sellInput.step = "1"; sellInput.value = "1";
+      sellInput.style.cssText = "width:120px;padding:6px;border-radius:6px;border:1px solid #3b426b;background:#0f1320;color:#eaf0ff;";
+      const sellPriceText = document.createElement("span");
+
+      sellRow.appendChild(sellLbl);
+      sellRow.appendChild(sellInput);
+      sellRow.appendChild(sellPriceText);
+
       const sellBtn = niceBtn(`賣出（${SELL_PRICE.toLocaleString()}／顆）`, "#6b8f5b");
       box.appendChild(sellRow);
       box.appendChild(sellBtn);
 
-      const sellInput = sellRow.querySelector("#orbSellQty");
-      const sellPriceText = sellRow.querySelector(".price");
-      function refreshSellPrice() {
+      function sellQty() {
         let q = parseInt(sellInput.value, 10);
         if (!Number.isFinite(q) || q < 1) q = 1;
+        return q;
+      }
+      function refreshSellPrice() {
+        const q = sellQty();
         sellPriceText.innerHTML = `可得：<b>${(q*SELL_PRICE).toLocaleString()}</b> 楓幣`;
       }
       sellInput.addEventListener("input", refreshSellPrice);
       refreshSellPrice();
 
       sellBtn.onclick = () => {
-        let q = parseInt(sellInput.value, 10); if (!Number.isFinite(q) || q < 1) q = 1;
+        const q = sellQty();
         const have = getQty(ORB_NAME);
         if (have < q) { alert(`${ORB_NAME} 數量不足！`); return; }
         rmIt(ORB_NAME, q);
@@ -288,6 +320,7 @@
       };
 
       container.appendChild(sectionCard("🌀 轉職寶珠 交易", wrap));
+      refreshers.push(refreshOwn, refreshBuyPrice, refreshSellPrice); // 輕量刷新
     })();
 
     // 底部灰按鈕（保留）
@@ -296,27 +329,56 @@
     disabledBtn.disabled = true;
     disabledBtn.style.cssText = "margin: 4px auto 8px auto; display:block; opacity:.6;";
     container.appendChild(disabledBtn);
+
+    // 對外提供只做「輕量刷新」的方法（不會重建，不會清空輸入框）
+    container._shop = {
+      refreshAll: function(){
+        for (const fn of refreshers) try { fn(); } catch(e){}
+      }
+    };
   }
 
   // --- 如存在 ShopHub，自動註冊成分頁 ---
   function registerToShopHub() {
     if (!w.ShopHub || typeof w.ShopHub.registerTab !== "function") return;
+
+    // 用閉包記住真實 DOM 根節點，tick 時可安全 refresh
+    let hubRoot = null;
+
     w.ShopHub.registerTab({
       id: "shop_main",
       title: "主商店",
-      render: function(container){ renderShopItems(container); },
-      tick: function(){ /* no-op */ }
+      render: function(container){
+        // 建立穩定的真實 DOM 根節點，不直接依賴外部 container 內部結構
+        if (container && container.querySelector) {
+          hubRoot = container.querySelector(":scope > .shop-root");
+        }
+        if (!hubRoot) {
+          hubRoot = document.createElement("div");
+          hubRoot.className = "shop-root";
+          if (container && container.appendChild) {
+            container.appendChild(hubRoot);
+          } else {
+            // 極端保底：外部 container 非 DOM，可掛在 body（理論上很少用到）
+            document.body.appendChild(hubRoot);
+          }
+        }
+
+        renderShopItems(hubRoot);       // 初始化一次
+        hubRoot._shop?.refreshAll?.();  // 每次顯示僅輕量刷新
+      },
+      // ShopHub 若會定時呼叫 tick，就只做輕量刷新，避免重建 DOM
+      tick: function(){
+        hubRoot?._shop?.refreshAll?.();
+      }
     });
   }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", registerToShopHub);
   } else {
     registerToShopHub();
   }
-
-
-
-
 
   // 導出
   w.openShopModal = openShopModal;

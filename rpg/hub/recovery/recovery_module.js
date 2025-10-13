@@ -1,6 +1,9 @@
+// ===============================
 // recovery_system.js
 // 自然恢復（讀秒，不受回合影響）— 統一「小數制」：0.2 = 20%
 // ✅ 取消職業區分版本 + GrowthHub 分頁 UI + 獨立存檔
+// ✅ 模組內獨立上限：不使用全域常數、不污染 window
+// ===============================
 
 let recoverySystem;
 
@@ -10,8 +13,11 @@ const BASE_MP_PER5S = 3;  // 1等 基礎 MP/5s
 const HP_INC_PER_LVL = 20; // 每升1級 +20 HP/5s
 const MP_INC_PER_LVL = 1;  // 每升1級 +1  MP/5s
 
-const PCT_PER_LEVEL_30S = 0.02; // 每升1級 +2%（小數）
+const PCT_PER_LEVEL_30S = 0.02; // 每升1級 +2%
 const PCT_CAP_30S = 0.60;       // 上限 60%
+
+// ✅ 模組內部專屬等級上限（不使用全域）
+let RECOVERY_MAX_LEVEL = 50;
 
 // === 獨立存檔（與主存檔分離） ===
 const RECOVERY_STORE_KEY = "recovery_system_store_v1";
@@ -23,8 +29,8 @@ function saveRecoveryStore(obj) {
 }
 function persistRecoveryToStore() {
   const obj = loadRecoveryStore();
-  obj.level = Math.min(20, Math.max(1, recoverySystem?.level || 1));
-  // 存「系統提供的基礎百分比」而不是玩家最終加成（避免重覆相加）
+  obj.level = Math.min(RECOVERY_MAX_LEVEL, Math.max(1, recoverySystem?.level || 1));
+  // 存「系統提供的基礎百分比」
   obj.basePercentDecimal = toFraction(player?.recoverPercentBaseDecimal || 0);
   saveRecoveryStore(obj);
 }
@@ -75,29 +81,32 @@ function initRecoverySystem() {
   const prevLevelFromStore  = store.level;
   const prevLevelFromPlayer = player?.recoverySystem?.level;
 
-  const prevLevel = Math.min(
-    20,
-    Math.max(1, (prevLevelFromStore ?? prevLevelFromPlayer ?? 1))
+  // 取玩家與存檔的最大值，避免舊檔壓低
+  const prevLevelRaw = Math.max(
+    1,
+    Number(prevLevelFromStore || 0),
+    Number(prevLevelFromPlayer || 0)
   );
+  const prevLevel = Math.min(RECOVERY_MAX_LEVEL, prevLevelRaw);
 
   recoverySystem = {
     level: prevLevel,
-    maxLevel: 20, // ← 統一 20
+    maxLevel: RECOVERY_MAX_LEVEL,
 
-    // 每 5 秒的固定恢復（不分職業）
+    // 每 5 秒固定恢復
     get hpFlatPer5s() {
       const upgrades = Math.max(0, this.level - 1);
-      return Math.max(0, Math.round(BASE_HP_PER5S + (HP_INC_PER_LVL * upgrades)));
+      return Math.round(BASE_HP_PER5S + (HP_INC_PER_LVL * upgrades));
     },
     get mpFlatPer5s() {
       const upgrades = Math.max(0, this.level - 1);
-      return Math.max(0, Math.round(BASE_MP_PER5S + (MP_INC_PER_LVL * upgrades)));
+      return Math.round(BASE_MP_PER5S + (MP_INC_PER_LVL * upgrades));
     },
 
-    // 30 秒百分比（小數）
+    // 百分比
     get percent30s() { return currentTotalPercent30s(); },
 
-    // 30 秒：僅百分比回復
+    // 各種加總
     get hpTotal30sPctOnly() {
       const maxHp = Math.max(1, player?.totalStats?.hp || 1);
       return Math.ceil(maxHp * this.percent30s);
@@ -106,56 +115,50 @@ function initRecoverySystem() {
       const maxMp = Math.max(1, player?.totalStats?.mp || 1);
       return Math.ceil(maxMp * this.percent30s);
     },
-
-    // 30 秒：僅固定值回復
     get hpTotal30sFlatOnly() { return this.hpFlatPer5s * 6; },
     get mpTotal30sFlatOnly() { return this.mpFlatPer5s * 6; },
-
-    // 30 秒：總回復
     get hpTotal30sAll() { return this.hpTotal30sPctOnly + this.hpTotal30sFlatOnly; },
     get mpTotal30sAll() { return this.mpTotal30sPctOnly + this.mpTotal30sFlatOnly; },
 
-    // 升級花費（沿用你原有的線性規則）
     get upgradeCost() { return 200 * this.level; }
   };
 
-  // 優先用獨立存檔中的 basePercentDecimal 當作玩家的基礎百分比來源（若有）
   if (store.basePercentDecimal != null) {
     player.recoverPercentBaseDecimal = toFraction(store.basePercentDecimal);
   }
 
   applySystemPercentToPlayer();
-
-  // 初始化完成就寫回獨立存檔，完成遷移/同步
   persistRecoveryToStore();
 
   window.recoverySystem = recoverySystem;
 }
 
-// ✅ 載入存檔後的同步（供 save_core.js 呼叫）
+// ✅ 載入存檔後同步（供 save_core.js 呼叫）
 function syncRecoveryFromPlayer() {
   if (!player) return;
 
   const store = loadRecoveryStore();
 
-  // 以獨立存檔為主；若沒有，再看 player
-  const lvl = Math.min(20, Math.max(1, (store.level ?? player?.recoverySystem?.level ?? 1)));
+  // 取最大值，確保不會被壓低
+  const lvlRaw = Math.max(
+    1,
+    Number(store.level || 0),
+    Number(player?.recoverySystem?.level || 0)
+  );
+  const lvl = Math.min(RECOVERY_MAX_LEVEL, lvlRaw);
+
   if (recoverySystem) recoverySystem.level = lvl;
 
-  // 同步基礎百分比（避免把技能、道具加成重覆疊）
   if (store.basePercentDecimal != null) {
     player.recoverPercentBaseDecimal = toFraction(store.basePercentDecimal);
   }
 
   applySystemPercentToPlayer();
 
-  // 回寫到 player（保持舊 save 結構不壞）
   player.recoverySystem = player.recoverySystem || {};
   player.recoverySystem.level = recoverySystem.level;
 
-  // 也回寫到獨立存檔，確保一致
   persistRecoveryToStore();
-
   window.recoverySystem = recoverySystem;
 }
 window.syncRecoveryFromPlayer = syncRecoveryFromPlayer;
@@ -173,7 +176,6 @@ setInterval(() => {
 
   const hpFlat = recoverySystem.hpFlatPer5s;
   const mpFlat = recoverySystem.mpFlatPer5s;
-
   const recoverBonus = Math.max(0, currentTotalPercent30s()); // 小數制
 
   const hpRecover = Math.ceil(hpFlat * (1 + recoverBonus));
@@ -187,48 +189,40 @@ setInterval(() => {
   if (typeof updateResourceUI === "function") updateResourceUI?.();
 }, 5000);
 
-// === 舊版彈窗 UI（保留，但不會自動用） ===
+// === 舊版彈窗 UI（保留） ===
 function openModulePanel() {
   const old = document.getElementById("recoveryModal");
   if (old) old.remove();
 
   const modal = document.createElement("div");
   modal.id = "recoveryModal";
-  modal.style.position = "fixed";
-  modal.style.top = "50%";
-  modal.style.left = "50%";
-  modal.style.transform = "translate(-50%, -50%)";
-  modal.style.background = "#222";
-  modal.style.padding = "20px";
-  modal.style.border = "3px solid #f44336";
-  modal.style.borderRadius = "12px";
-  modal.style.zIndex = "9999";
-  modal.style.width = "260px";
-  modal.style.boxShadow = "0 0 15px rgba(0,0,0,0.5)";
-  modal.style.color = "#fff";
-  modal.style.fontSize = "14px";
-  modal.style.lineHeight = "1.6";
+  modal.style.cssText = `
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:#222;padding:20px;border:3px solid #f44336;border-radius:12px;
+    z-index:9999;width:260px;box-shadow:0 0 15px rgba(0,0,0,0.5);
+    color:#fff;font-size:14px;line-height:1.6;
+  `;
 
   const cost = Math.floor(recoverySystem.upgradeCost);
   const pct = Math.round(recoverySystem.percent30s * 10000) / 100; // 20.00%
 
   modal.innerHTML = `
     <h2 style="margin:0 0 8px;">💖 恢復系統</h2>
-    <p style="margin:4px 0;">（無職業限制）</p>
-    <p style="margin:4px 0;">等級：<b>${recoverySystem.level}</b> / ${recoverySystem.maxLevel}</p>
+    <p>（無職業限制）</p>
+    <p>等級：<b>${recoverySystem.level}</b> / ${recoverySystem.maxLevel}</p>
     <hr style="border-color:#444;">
-    <p style="margin:4px 0;">每 5 秒固定回復（HP/MP）：<b>${recoverySystem.hpFlatPer5s} / ${recoverySystem.mpFlatPer5s}</b></p>
-    <p style="margin:4px 0;">恢復力加成：<b>+${pct}%</b></p>
-    <p style="margin:4px 0;opacity:.85;">最終每 5 秒實際回復（HP/MP）：<b>${
+    <p>每 5 秒固定回復（HP/MP）：<b>${recoverySystem.hpFlatPer5s} / ${recoverySystem.mpFlatPer5s}</b></p>
+    <p>恢復力加成：<b>+${pct}%</b></p>
+    <p style="opacity:.85;">最終每 5 秒實際回復（HP/MP）：<b>${
       Math.ceil(recoverySystem.hpFlatPer5s * (1 + recoverySystem.percent30s))
     } / ${
       Math.ceil(recoverySystem.mpFlatPer5s * (1 + recoverySystem.percent30s))
     }</b></p>
     <hr style="border-color:#444;">
-    <p style="margin:4px 0;">升級花費：<b>${cost}</b> 鑽石</p>
-    <div style="display:flex; gap:8px; margin-top:8px;">
-      <button id="rcv-upgrade" style="flex:1; padding:6px 8px;">升級</button>
-      <button id="rcv-close"   style="flex:1; padding:6px 8px;">關閉</button>
+    <p>升級花費：<b>${cost}</b> 鑽石</p>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button id="rcv-upgrade" style="flex:1;">升級</button>
+      <button id="rcv-close"   style="flex:1;">關閉</button>
     </div>
   `;
   document.body.appendChild(modal);
@@ -251,19 +245,15 @@ function upgradeRecovery() {
   player.gem -= cost;
   recoverySystem.level = Math.min(recoverySystem.maxLevel, recoverySystem.level + 1);
 
-  // 同步到存檔來源（player 舊欄位）
   player.recoverySystem = player.recoverySystem || {};
   player.recoverySystem.level = recoverySystem.level;
 
   applySystemPercentToPlayer();
-
-  // ✅ 同步到獨立存檔
   persistRecoveryToStore();
 
   if (typeof updateResourceUI === "function") updateResourceUI?.();
   if (typeof saveGame === 'function') saveGame();
 
-  // 若使用 GrowthHub 分頁，升級後即時刷新
   try { window.GrowthHub && window.GrowthHub.requestRerender(); } catch (_) {}
 }
 
@@ -272,7 +262,7 @@ window.openModulePanel   = openModulePanel;
 window.closeRecoveryModal = closeRecoveryModal;
 window.upgradeRecovery    = upgradeRecovery;
 
-// ✅ 等存檔套用後再同步等級/百分比（被動，不主動載入）
+// ✅ 存檔套用後自動同步
 if (window.GameSave?.onApply) {
   GameSave.onApply(function () {
     try { syncRecoveryFromPlayer(); } catch (e) {
@@ -283,15 +273,15 @@ if (window.GameSave?.onApply) {
 
 /* ------------------------------------------------------------------
    GrowthHub 分頁 UI（不彈窗）
-   - 這段讓「恢復系統」直接在 GrowthHub 以分頁方式顯示
-   - 不影響原本城鎮/探索系統
 -------------------------------------------------------------------*/
 (function registerGrowthTab(){
   function fmt(n){ return Number(n||0).toLocaleString(); }
   function pct(n){ return (Number(n||0)*100).toFixed(2) + "%"; }
 
   function render(container){
-    if (!recoverySystem) { container.innerHTML = '<div style="opacity:.7">（載入中…）</div>'; return; }
+    if (!recoverySystem) {
+      container.innerHTML = '<div style="opacity:.7">（載入中…）</div>'; return;
+    }
 
     var pct30 = pct(recoverySystem.percent30s);
     var nextCost = Math.floor(recoverySystem.upgradeCost);
@@ -314,18 +304,15 @@ if (window.GameSave?.onApply) {
       '</div>';
 
     var b = container.querySelector('#rcvUpgradeBtn');
-    if (b) b.onclick = function(){
-      upgradeRecovery();
-    };
+    if (b) b.onclick = function(){ upgradeRecovery(); };
   }
 
-  // 若有 GrowthHub，註冊為分頁；沒有就忽略（仍可用舊彈窗）
   if (window.GrowthHub && typeof window.GrowthHub.registerTab === 'function'){
     window.GrowthHub.registerTab({
       id: 'recovery',
       title: '恢復系統',
       render: render,
-      tick: function(){ /* 不需要每秒邏輯，數值由 setInterval 更新 */ }
+      tick: function(){} // 不需要每秒邏輯
     });
   }
 })();

@@ -56,12 +56,7 @@
   }
   function open(){ ensure(); _m.style.display="flex"; renderAct(); }
   function close(){ if(_m) _m.style.display="none"; var t=get(_active); if(t&&t.onClose) t.onClose(); }
-  function loop(){
-    var now=Date.now(), dt=Math.max(0,(now-_last)/1000); _last=now;
-    _accT+=dt; if(_accT>=1){ var steps=Math.floor(_accT); _accT-=steps; for(var i=0;i<_tabs.length;i++){ var d=_tabs[i]; if(d&&typeof d.tick==="function") try{ d.tick(steps);}catch(e){} } }
-    _accR+=dt; if((_m&&_m.style.display==="flex"&&_accR>=1)||_req){ _accR=0; _req=false; renderAct(); }
-    requestAnimationFrame(loop);
-  }
+  function loop(){}
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", ensure); else ensure();
   requestAnimationFrame(loop);
 
