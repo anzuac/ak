@@ -1,5 +1,4 @@
 // dungeon_tabs_challenge.js — 挑戰分頁（票券雙軌 + 進度 + 挑戰/重試/掃蕩；勝利顯示實拿）
-// ★ 與飾品試煉一致：頂部票券條（免費/背包/總計）、每副本獨立進度、挑戰下一關、挑戰上次通關、掃蕩×0.75
 (function () {
   if (!window.DungeonHub) return;
 
@@ -67,23 +66,29 @@
     }
   }
 
-  // 掃蕩（挑戰）：用當關最終獎勵的 0.75 倍；至少下取整
+  // =====（可選更穩版）掃蕩：直接抽 75%，分流入庫，避免「先加後扣」不同步 =====
   function sweepGrant(dDef, level){
     var scaledView = U.scaledFinalRewardsForLevel(dDef.finalRewards, level);
-    var got = U.grantFinalRewards(scaledView, `${dDef.name}（Lv.${level}）`); // 先抽實拿
-    var out = {};
-    Object.keys(got).forEach(function(k){
-      out[k] = Math.max(0, Math.floor(got[k] * 0.75));
-    });
-    // 入庫（補差額：先扣原抽，後加回調整值 —— 簡化：直接再加 (out[k] - got[k])）
-    Object.keys(out).forEach(function(k){
-      var delta = out[k] - got[k];
-      if (delta !== 0) {
-        if (delta > 0) window.addItem?.(k, delta);
-        else window.removeItem?.(k, -delta);
+    var got = {};
+    Object.keys(scaledView || {}).forEach(function(k){
+      var r = scaledView[k]; if (!r) return;
+      var a = r[0], b = r[1];
+      var roll = Math.floor(Math.random() * (b - a + 1)) + a;
+      var qty  = Math.max(0, Math.floor(roll * 0.75));
+      if (qty <= 0) return;
+      got[k] = qty;
+
+      // 入庫（資源 / 背包）
+      if (k === "金幣" || k === "gold") {
+        window.player.gold = (window.player.gold || 0) + qty;
+      } else if (k === "強化石" || k === "stone") {
+        window.player.stone = (window.player.stone || 0) + qty;
+      } else {
+        window.addItem?.(k, qty);
       }
     });
-    return out;
+    window.updateResourceUI?.();
+    return got;
   }
 
   // 跑波次（與原版相同，但勝利時升進度）
@@ -93,11 +98,15 @@
     var idx = 0;
 
     var scaledView = U.scaledFinalRewardsForLevel(dunDef.finalRewards, level);
+
+    // ✅ 改成泛用：把所有鍵都列出來（含中文鍵）
     var dispRewards = [];
-    if (scaledView.gold)     dispRewards.push({ type:"text", key:"金幣 "     + U.formatRange(scaledView.gold),           qty:"" });
-    if (scaledView.stone)    dispRewards.push({ type:"text", key:"強化石 "   + U.formatRange(scaledView.stone),          qty:"" });
-    if (scaledView.shard)    dispRewards.push({ type:"text", key:"元素碎片 " + U.formatRange(scaledView.shard,"個"),     qty:"" });
-    if (scaledView.advStone) dispRewards.push({ type:"text", key:"進階石 "   + U.formatRange(scaledView.advStone,"個"),  qty:"" });
+    Object.keys(scaledView || {}).forEach(function(k){
+      var r = scaledView[k];
+      if (!r) return;
+      var unit = /碎片|石|券|票|符|令/.test(k) ? "個" : "";
+      dispRewards.push({ type:"text", key: k + " " + U.formatRange(r, unit), qty: "" });
+    });
 
     var rewarded = false;
     var hooks = {
@@ -130,7 +139,6 @@
           rewarded = true;
           var got = U.grantFinalRewards(scaledView, `${dunDef.name}（Lv.${level}）`);
           renderGotRewards(got);
-          // 升進度
           setMaxCleared(dunDef.id, level);
         }
       }
@@ -194,12 +202,16 @@
     var nextLv = Math.min((maxCleared + 1), LV.MAX_LEVEL);
 
     var scaled = U.scaledFinalRewardsForLevel(d.finalRewards, nextLv);
+
+    // ✅ 改成泛用列法（含中文鍵）
     var rewardLines = [];
-    if (scaled.gold)     rewardLines.push(`・金幣：${U.formatRange(scaled.gold)}`);
-    if (scaled.stone)    rewardLines.push(`・強化石：${U.formatRange(scaled.stone)}`);
-    if (scaled.shard)    rewardLines.push(`・元素碎片：${U.formatRange(scaled.shard,"個")}`);
-    if (scaled.advStone) rewardLines.push(`・進階石：${U.formatRange(scaled.advStone,"個")}`);
-    if (rewardLines.length === 0) rewardLines.push(`・—`);
+    Object.keys(scaled || {}).forEach(function(k){
+      var r = scaled[k];
+      if (!r) return;
+      var unit = /碎片|石|券|票|符|令/.test(k) ? "個" : "";
+      rewardLines.push(`・${k}：${U.formatRange(r, unit)}`);
+    });
+    if (rewardLines.length === 0) rewardLines.push("・—");
 
     var waves = U.buildWavesForLevel(d.wavesTemplate, nextLv);
     var boss  = waves[waves.length-1].monster;

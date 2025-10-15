@@ -1,26 +1,43 @@
 // ===============================
-// recovery_system.js
-// 自然恢復（讀秒，不受回合影響）— 統一「小數制」：0.2 = 20%
-// ✅ 取消職業區分版本 + GrowthHub 分頁 UI + 獨立存檔
-// ✅ 模組內獨立上限：不使用全域常數、不污染 window
+// recovery_system.js (Simple Tick Variant)
+// 單純回復（每 10s 固定回復），回復量吃「總恢復力」的 30% 權重
+// ✅ 不覆寫 player.recoverPercent、不寫入 coreBonus
+// ✅ GrowthHub 分頁 + 獨立存檔（僅存等級）
 // ===============================
 
 let recoverySystem;
 
-// === 參數設定（不分職業） ===
-const BASE_HP_PER5S = 30; // 1等 基礎 HP/5s
-const BASE_MP_PER5S = 3;  // 1等 基礎 MP/5s
-const HP_INC_PER_LVL = 20; // 每升1級 +20 HP/5s
-const MP_INC_PER_LVL = 1;  // 每升1級 +1  MP/5s
+// === 參數設定 ===
+const TICK_MS = 10000;          // 每 10 秒觸發一次
+const BASE_HP_PER_TICK = 30;    // 1 等 HP 基礎回復（每 10s）
+const BASE_MP_PER_TICK = 3;     // 1 等 MP 基礎回復（每 10s）
+const HP_INC_PER_LEVEL   = 30;  // 每級 +30 HP / 10s
+const MP_INC_PER_LEVEL   = 2;   // 每級 +2  MP / 10s
 
-const PCT_PER_LEVEL_30S = 0.02; // 每升1級 +2%
-const PCT_CAP_30S = 0.60;       // 上限 60%
+const RECOVERY_EAT_RATIO = 30; // 吃總恢復力的 30%
 
-// ✅ 模組內部專屬等級上限（不使用全域）
-let RECOVERY_MAX_LEVEL = 50;
+let   RECOVERY_MAX_LEVEL = 20;   // 預設等級上限（可調整）
 
-// === 獨立存檔（與主存檔分離） ===
-const RECOVERY_STORE_KEY = "recovery_system_store_v1";
+// === 花費規則（資源：強化石 stone）===
+// 基礎 1000；1-10 每次 +1000；11-20 每次 +3000；21+ 每次 +7000（保留泛化）
+const COST_BASE = 1000;
+function costIncrementForLevel(prevLevel) {
+  if (prevLevel <= 10) return 1000;
+  if (prevLevel <= 20) return 3000;
+  return 7000;
+}
+// 升到 (level+1) 的花費：從 level=1 的 1000 開始，逐級把增量加上來
+function upgradeCostForLevel(level) {
+  // level = 當前等級（欲升級到 level+1 的成本）
+  let cost = COST_BASE; // 1->2 的基礎成本
+  for (let L = 1; L < level; L++) {
+    cost += costIncrementForLevel(L);
+  }
+  return cost;
+}
+
+// === 獨立存檔（只存等級；相容舊資料時可擴充） ===
+const RECOVERY_STORE_KEY = "recovery_system_store_simple_v1";
 function loadRecoveryStore() {
   try { return JSON.parse(localStorage.getItem(RECOVERY_STORE_KEY)) || {}; } catch(_) { return {}; }
 }
@@ -30,8 +47,6 @@ function saveRecoveryStore(obj) {
 function persistRecoveryToStore() {
   const obj = loadRecoveryStore();
   obj.level = Math.min(RECOVERY_MAX_LEVEL, Math.max(1, recoverySystem?.level || 1));
-  // 存「系統提供的基礎百分比」
-  obj.basePercentDecimal = toFraction(player?.recoverPercentBaseDecimal || 0);
   saveRecoveryStore(obj);
 }
 
@@ -39,125 +54,71 @@ function persistRecoveryToStore() {
 function toFraction(x) {
   const v = Number(x) || 0;
   if (v <= 0) return 0;
-  if (v > 1 && v <= 100) return v / 100; // 相容舊資料若是百分比
+  if (v > 1 && v <= 100) return v / 100;
   return Math.min(v, 1);
 }
 
-// 將系統提供的回復百分比加到 player（保持你原本「小數制」）
-function applySystemPercentToPlayer() {
-  if (typeof player === "undefined") return;
-
-  if (player.recoverPercentBaseDecimal === undefined) {
-    player.recoverPercentBaseDecimal = toFraction(player.recoverPercent || 0);
-  } else {
-    player.recoverPercentBaseDecimal = toFraction(player.recoverPercentBaseDecimal);
-  }
-
-  const lvl = Math.max(1, recoverySystem?.level || 1);
-  const upgrades = Math.max(0, lvl - 1);
-  const systemPct = Math.max(0, upgrades * PCT_PER_LEVEL_30S); // 每級 +2%
-
-  player.recoverPercent = Math.min(
-    player.recoverPercentBaseDecimal + systemPct,
-    PCT_CAP_30S
-  );
+// 讀取「總恢復力」並套 30% 權重（不動任何玩家欄位）
+function getEffectiveRecoverBonus() {
+  // 建議你的 player.totalStats.recoverPercent 已經走 base+skill+core
+  const totalPct = toFraction(player?.totalStats?.recoverPercent || 0); // 小數 0~1
+  return Math.max(0, totalPct * RECOVERY_EAT_RATIO);
 }
 
-// 目前 30 秒內的總回復百分比（小數，含技能）
-function currentTotalPercent30s() {
-  const baseDecimal  = toFraction(player?.recoverPercent || 0);
-  const skillDecimal = toFraction(player?.skillBonus?.recoverPercent || 0);
-  return Math.min(baseDecimal + skillDecimal, PCT_CAP_30S);
-}
-
-// 換算成每 5 秒的百分比
-function per5sPercent() {
-  return currentTotalPercent30s() / 6; // 30s -> 5s
+// 計算每次 tick 的固定回復（含等級）
+function getFlatPerTick(level) {
+  const L = Math.max(1, level|0);
+  const upgrades = Math.max(0, L - 1);
+  const hp = BASE_HP_PER_TICK + HP_INC_PER_LEVEL * upgrades;
+  const mp = BASE_MP_PER_TICK + MP_INC_PER_LEVEL * upgrades;
+  return { hp, mp };
 }
 
 // === 初始化 ===
 function initRecoverySystem() {
   const store = loadRecoveryStore();
-  const prevLevelFromStore  = store.level;
-  const prevLevelFromPlayer = player?.recoverySystem?.level;
-
-  // 取玩家與存檔的最大值，避免舊檔壓低
-  const prevLevelRaw = Math.max(
-    1,
-    Number(prevLevelFromStore || 0),
-    Number(prevLevelFromPlayer || 0)
-  );
-  const prevLevel = Math.min(RECOVERY_MAX_LEVEL, prevLevelRaw);
+  const prev = Math.max(1, Number(store.level || 1));
+  const lvl  = Math.min(RECOVERY_MAX_LEVEL, prev);
 
   recoverySystem = {
-    level: prevLevel,
+    level: lvl,
     maxLevel: RECOVERY_MAX_LEVEL,
 
-    // 每 5 秒固定恢復
-    get hpFlatPer5s() {
-      const upgrades = Math.max(0, this.level - 1);
-      return Math.round(BASE_HP_PER5S + (HP_INC_PER_LVL * upgrades));
+    // 當前每 10 秒固定回復（未吃恢復力）
+    get hpFlatPerTick() {
+      return getFlatPerTick(this.level).hp;
     },
-    get mpFlatPer5s() {
-      const upgrades = Math.max(0, this.level - 1);
-      return Math.round(BASE_MP_PER5S + (MP_INC_PER_LVL * upgrades));
+    get mpFlatPerTick() {
+      return getFlatPerTick(this.level).mp;
     },
 
-    // 百分比
-    get percent30s() { return currentTotalPercent30s(); },
-
-    // 各種加總
-    get hpTotal30sPctOnly() {
-      const maxHp = Math.max(1, player?.totalStats?.hp || 1);
-      return Math.ceil(maxHp * this.percent30s);
+    // 實際每 10 秒回復（吃總恢復力的 30%）
+    get effectiveBonus() {
+      return getEffectiveRecoverBonus(); // 小數 0~1
     },
-    get mpTotal30sPctOnly() {
-      const maxMp = Math.max(1, player?.totalStats?.mp || 1);
-      return Math.ceil(maxMp * this.percent30s);
+    get hpPerTickActual() {
+      return Math.ceil(this.hpFlatPerTick * (1 + this.effectiveBonus));
     },
-    get hpTotal30sFlatOnly() { return this.hpFlatPer5s * 6; },
-    get mpTotal30sFlatOnly() { return this.mpFlatPer5s * 6; },
-    get hpTotal30sAll() { return this.hpTotal30sPctOnly + this.hpTotal30sFlatOnly; },
-    get mpTotal30sAll() { return this.mpTotal30sPctOnly + this.mpTotal30sFlatOnly; },
+    get mpPerTickActual() {
+      return Math.ceil(this.mpFlatPerTick * (1 + this.effectiveBonus));
+    },
 
-    get upgradeCost() { return 200 * this.level; }
+    // 升級花費（以「當前等級 -> 下一級」計）
+    get upgradeCost() {
+      return upgradeCostForLevel(this.level);
+    }
   };
 
-  if (store.basePercentDecimal != null) {
-    player.recoverPercentBaseDecimal = toFraction(store.basePercentDecimal);
-  }
-
-  applySystemPercentToPlayer();
   persistRecoveryToStore();
-
   window.recoverySystem = recoverySystem;
 }
 
 // ✅ 載入存檔後同步（供 save_core.js 呼叫）
 function syncRecoveryFromPlayer() {
   if (!player) return;
-
   const store = loadRecoveryStore();
-
-  // 取最大值，確保不會被壓低
-  const lvlRaw = Math.max(
-    1,
-    Number(store.level || 0),
-    Number(player?.recoverySystem?.level || 0)
-  );
-  const lvl = Math.min(RECOVERY_MAX_LEVEL, lvlRaw);
-
+  const lvl = Math.min(RECOVERY_MAX_LEVEL, Math.max(1, Number(store.level || 1)));
   if (recoverySystem) recoverySystem.level = lvl;
-
-  if (store.basePercentDecimal != null) {
-    player.recoverPercentBaseDecimal = toFraction(store.basePercentDecimal);
-  }
-
-  applySystemPercentToPlayer();
-
-  player.recoverySystem = player.recoverySystem || {};
-  player.recoverySystem.level = recoverySystem.level;
-
   persistRecoveryToStore();
   window.recoverySystem = recoverySystem;
 }
@@ -169,27 +130,47 @@ window.syncRecoveryFromPlayer = syncRecoveryFromPlayer;
   initRecoverySystem();
 })();
 
-// === Tick：每 5 秒恢復一次 ===
+// === Tick：每 10 秒恢復一次（不覆寫任何「恢復力」來源，只讀 totalStats） ===
 setInterval(() => {
-  if (!player) return;
+  if (!player || !recoverySystem) return;
   if (player.currentHP <= 0) return;
 
-  const hpFlat = recoverySystem.hpFlatPer5s;
-  const mpFlat = recoverySystem.mpFlatPer5s;
-  const recoverBonus = Math.max(0, currentTotalPercent30s()); // 小數制
-
-  const hpRecover = Math.ceil(hpFlat * (1 + recoverBonus));
-  const mpRecover = Math.ceil(mpFlat * (1 + recoverBonus));
+  const hpGain = recoverySystem.hpPerTickActual;
+  const mpGain = recoverySystem.mpPerTickActual;
 
   const maxHp = player.totalStats.hp;
   const maxMp = player.totalStats.mp;
-  player.currentHP = Math.min(player.currentHP + hpRecover, maxHp);
-  player.currentMP = Math.min(player.currentMP + mpRecover, maxMp);
+
+  player.currentHP = Math.min(player.currentHP + hpGain, maxHp);
+  player.currentMP = Math.min(player.currentMP + mpGain, maxMp);
 
   if (typeof updateResourceUI === "function") updateResourceUI?.();
-}, 5000);
+}, TICK_MS);
 
-// === 舊版彈窗 UI（保留） ===
+// === 升級（消耗強化石 stone） ===
+function upgradeRecovery() {
+  if (!player || !recoverySystem) return;
+  if (recoverySystem.level >= recoverySystem.maxLevel) {
+    alert("已達到最高等級！");
+    return;
+  }
+  const cost = Math.floor(recoverySystem.upgradeCost);
+  if ((player.stone || 0) < cost) {
+    alert("強化石不足！");
+    return;
+  }
+  player.stone -= cost;
+  recoverySystem.level = Math.min(recoverySystem.maxLevel, recoverySystem.level + 1);
+
+  persistRecoveryToStore();
+
+  if (typeof updateResourceUI === "function") updateResourceUI?.();
+  if (typeof saveGame === "function") saveGame?.();
+
+  try { window.GrowthHub && window.GrowthHub.requestRerender(); } catch (_) {}
+}
+
+// === 舊版彈窗 UI（可留可移除） ===
 function openModulePanel() {
   const old = document.getElementById("recoveryModal");
   if (old) old.remove();
@@ -198,28 +179,28 @@ function openModulePanel() {
   modal.id = "recoveryModal";
   modal.style.cssText = `
     position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-    background:#222;padding:20px;border:3px solid #f44336;border-radius:12px;
-    z-index:9999;width:260px;box-shadow:0 0 15px rgba(0,0,0,0.5);
+    background:#222;padding:20px;border:3px solid #10b981;border-radius:12px;
+    z-index:9999;width:280px;box-shadow:0 0 15px rgba(0,0,0,0.5);
     color:#fff;font-size:14px;line-height:1.6;
   `;
 
   const cost = Math.floor(recoverySystem.upgradeCost);
-  const pct = Math.round(recoverySystem.percent30s * 10000) / 100; // 20.00%
+  const pct  = Math.round(recoverySystem.effectiveBonus * 10000) / 100; // 例如 15.00%
 
   modal.innerHTML = `
     <h2 style="margin:0 0 8px;">💖 恢復系統</h2>
-    <p>（無職業限制）</p>
+    <p>（每 10 秒回復）</p>
     <p>等級：<b>${recoverySystem.level}</b> / ${recoverySystem.maxLevel}</p>
     <hr style="border-color:#444;">
-    <p>每 5 秒固定回復（HP/MP）：<b>${recoverySystem.hpFlatPer5s} / ${recoverySystem.mpFlatPer5s}</b></p>
-    <p>恢復力加成：<b>+${pct}%</b></p>
-    <p style="opacity:.85;">最終每 5 秒實際回復（HP/MP）：<b>${
-      Math.ceil(recoverySystem.hpFlatPer5s * (1 + recoverySystem.percent30s))
-    } / ${
-      Math.ceil(recoverySystem.mpFlatPer5s * (1 + recoverySystem.percent30s))
-    }</b></p>
+    <p>基礎每 10 秒回復：<b>${recoverySystem.hpFlatPerTick} HP / ${recoverySystem.mpFlatPerTick} MP</b></p>
+    <p>吃回復力（30% 權重）：<b>+${pct}%</b></p>
+    <p style="opacity:.85;">實際每 10 秒回復：<b>${
+      recoverySystem.hpPerTickActual
+    } HP / ${
+      recoverySystem.mpPerTickActual
+    } MP</b></p>
     <hr style="border-color:#444;">
-    <p>升級花費：<b>${cost}</b> 鑽石</p>
+    <p>升級花費（強化石）：<b>${cost}</b></p>
     <div style="display:flex;gap:8px;margin-top:8px;">
       <button id="rcv-upgrade" style="flex:1;">升級</button>
       <button id="rcv-close"   style="flex:1;">關閉</button>
@@ -227,37 +208,11 @@ function openModulePanel() {
   `;
   document.body.appendChild(modal);
   document.getElementById('rcv-upgrade').onclick = upgradeRecovery;
-  document.getElementById('rcv-close').onclick   = closeRecoveryModal;
+  document.getElementById('rcv-close').onclick   = () => modal.remove();
 }
 function closeRecoveryModal(){ const m = document.getElementById("recoveryModal"); if (m) m.remove(); }
 
-// === 升級 ===
-function upgradeRecovery() {
-  if (recoverySystem.level >= recoverySystem.maxLevel) {
-    alert("已達到最高等級！");
-    return;
-  }
-  const cost = Math.floor(recoverySystem.upgradeCost);
-  if ((player?.gem || 0) < cost) {
-    alert("鑽石不足！");
-    return;
-  }
-  player.gem -= cost;
-  recoverySystem.level = Math.min(recoverySystem.maxLevel, recoverySystem.level + 1);
-
-  player.recoverySystem = player.recoverySystem || {};
-  player.recoverySystem.level = recoverySystem.level;
-
-  applySystemPercentToPlayer();
-  persistRecoveryToStore();
-
-  if (typeof updateResourceUI === "function") updateResourceUI?.();
-  if (typeof saveGame === 'function') saveGame();
-
-  try { window.GrowthHub && window.GrowthHub.requestRerender(); } catch (_) {}
-}
-
-// 對外舊接口（可選）
+// 對外舊接口（保留）
 window.openModulePanel   = openModulePanel;
 window.closeRecoveryModal = closeRecoveryModal;
 window.upgradeRecovery    = upgradeRecovery;
@@ -283,22 +238,22 @@ if (window.GameSave?.onApply) {
       container.innerHTML = '<div style="opacity:.7">（載入中…）</div>'; return;
     }
 
-    var pct30 = pct(recoverySystem.percent30s);
+    var eBonus = pct(recoverySystem.effectiveBonus);
     var nextCost = Math.floor(recoverySystem.upgradeCost);
 
     container.innerHTML =
       '<div style="background:#0b1220;border:1px solid #1f2937;border-radius:10px;padding:12px">'+
-        '<div style="font-weight:700;margin-bottom:6px">💖 恢復系統（不分職業）</div>'+
+        '<div style="font-weight:700;margin-bottom:6px">💖 恢復系統（每 10 秒）</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;line-height:1.8">'+
           '<div>等級：<b>'+recoverySystem.level+'</b> / '+recoverySystem.maxLevel+'</div>'+
-          '<div>恢復力加成（30s）：<b>'+pct30+'</b></div>'+
-          '<div>每 5 秒固定回復：HP <b>'+fmt(recoverySystem.hpFlatPer5s)+'</b></div>'+
-          '<div>每 5 秒固定回復：MP <b>'+fmt(recoverySystem.mpFlatPer5s)+'</b></div>'+
-          '<div>實際每 5 秒（HP）：<b>'+fmt(Math.ceil(recoverySystem.hpFlatPer5s*(1+recoverySystem.percent30s)))+'</b></div>'+
-          '<div>實際每 5 秒（MP）：<b>'+fmt(Math.ceil(recoverySystem.mpFlatPer5s*(1+recoverySystem.percent30s)))+'</b></div>'+
+          '<div>回復力吃入：<b>'+eBonus+'</b></div>'+
+          '<div>基礎每 10 秒（HP）：<b>'+fmt(recoverySystem.hpFlatPerTick)+'</b></div>'+
+          '<div>基礎每 10 秒（MP）：<b>'+fmt(recoverySystem.mpFlatPerTick)+'</b></div>'+
+          '<div>實際每 10 秒（HP）：<b>'+fmt(recoverySystem.hpPerTickActual)+'</b></div>'+
+          '<div>實際每 10 秒（MP）：<b>'+fmt(recoverySystem.mpPerTickActual)+'</b></div>'+
         '</div>'+
         '<div style="margin-top:10px;display:flex;gap:8px;align-items:center">'+
-          '<div>升級花費：<b>'+fmt(nextCost)+'</b> 鑽石</div>'+
+          '<div>升級花費（強化石）：<b>'+fmt(nextCost)+'</b></div>'+
           '<button id="rcvUpgradeBtn" style="margin-left:auto;background:#10b981;border:none;color:#0b1220;border-radius:8px;padding:6px 10px;cursor:pointer">升級</button>'+
         '</div>'+
       '</div>';
@@ -321,8 +276,4 @@ if (window.GameSave?.onApply) {
 window.resetRecoveryStore = function() {
   saveRecoveryStore({});
   if (recoverySystem) recoverySystem.level = 1;
-  if (player) {
-    player.recoverPercentBaseDecimal = 0;
-    applySystemPercentToPlayer();
-  }
 };

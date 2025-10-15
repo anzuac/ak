@@ -5,10 +5,10 @@
 
   // ===== 等級倍率（與波次副本統一概念） =====
   var V13_LEVEL = {
-    MAX_LEVEL: 30,
+    MAX_LEVEL: 10,
     statBase: 1.40,       // Lv1 基礎倍率
     statStep: 1.30,       // 每等數值加乘
-    rewardStepMul: 1.04,  // 獎勵每等放大倍率
+    rewardStepMul: 1.4,  // 獎勵每等放大倍率
     tune: 1.00
   };
 

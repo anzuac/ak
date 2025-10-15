@@ -28,7 +28,7 @@
   }
 
   // ====== 副本定義（只描述玩法，不含票券）======
-  // 規則：每個副本只掉它配置到的獎勵鍵（金幣/強化石/元素碎片/進階石）
+  // 可直接在 finalRewards 內寫中文鍵名（如「金幣」「元素碎片」「進階石」「稀有結晶」…）
   const WAVE_DUNGEONS = [
     {
       id: "gold_rush",
@@ -40,7 +40,8 @@
         { label: "Wave 2", monster: { name: "金甲兵",   atk: 180, def: 90,  hp: 6000, aps: 0.9 } },
         { label: "Wave 3", monster: { name: "金庫守衛", atk: 300, def: 140, hp: 10000, aps: 1.0 } }
       ],
-      finalRewards: { gold: [3000, 5000] } // 只掉金幣
+      // 任意鍵皆可；金幣會自動加到 player.gold
+      finalRewards: { "金幣": [3000, 5000] }
     },
     {
       id: "stone_rush",
@@ -52,7 +53,8 @@
         { label: "Wave 2", monster: { name: "晶岩兵",   atk: 180, def: 100, hp: 6472, aps: 0.9 } },
         { label: "Wave 3", monster: { name: "晶皇巨像", atk: 220, def: 140, hp: 13555, aps: 1.0 } }
       ],
-      finalRewards: { stone: [190, 440] }  // 只掉強化石
+      // 支援舊鍵 stone 或中文鍵「強化石」
+      finalRewards: { "強化石": [190, 440] }
     },
     {
       id: "shard_rush",
@@ -64,7 +66,8 @@
         { label: "Wave 2", monster: { name: "流影靈核", atk: 168, def: 100,  hp: 6900,  aps: 1.0 } },
         { label: "Wave 3", monster: { name: "耀晶靈核", atk: 262, def: 146,  hp: 10300, aps: 1.5 } }
       ],
-      finalRewards: { shard: [1, 5] }     // 只掉元素碎片
+      // 舊鍵 shard 亦相容，會映射顯示為「元素碎片」
+      finalRewards: { "元素碎片": [1, 5] }
     },
     {
       id: "adv_stone_rush",
@@ -76,7 +79,8 @@
         { label: "Wave 2", monster: { name: "高壓晶核", atk: 77,  def: 160, hp: 12000, aps: 0.9 } },
         { label: "Wave 3", monster: { name: "究極晶核", atk: 220, def: 220, hp: 18000, aps: 2.0 } }
       ],
-      finalRewards: { advStone: [1, 5] }  // 只掉進階石（需要 addItem("進階石", n) 支援）
+      // 舊鍵 advStone 亦相容，會映射顯示為「進階石」
+      finalRewards: { "衝星石": [1, 5] }
     }
   ];
 
@@ -109,45 +113,65 @@
     return out;
   }
 
+  // ✅ 改為「泛用版」：任何鍵都會依等級放大（舊鍵也相容）
   function scaledFinalRewardsForLevel(view, level){
     const mul = rewardMultiplier(level);
-    const scale = (r) => (!r ? null : [ Math.max(0, Math.floor(r[0]*mul)), Math.max(0, Math.floor(r[1]*mul)) ]);
-    return {
-      gold:     view.gold     ? scale(view.gold)     : null,
-      stone:    view.stone    ? scale(view.stone)    : null,
-      shard:    view.shard    ? scale(view.shard)    : null,
-      advStone: view.advStone ? scale(view.advStone) : null
-    };
+    const out = {};
+    Object.keys(view || {}).forEach(k => {
+      const r = view[k];
+      if (!Array.isArray(r) || r.length < 2) return;
+      out[k] = [
+        Math.max(0, Math.floor(r[0]*mul)),
+        Math.max(0, Math.floor(r[1]*mul))
+      ];
+    });
+    return out;
   }
 
+  // ✅ 改為「泛用版」：支援任意中文鍵；並同時支援舊鍵 gold/stone/shard/advStone
+  // 規則：
+  // - "金幣" 或 "gold"   → 加到 player.gold
+  // - "強化石" 或 "stone" → 加到 player.stone
+  // - "shard" 映射顯示為「元素碎片」，"advStone" 映射顯示為「進階石」
+  // - 其他鍵（含中文） → 直接 addItem(鍵名, 數量) 進背包
   function grantFinalRewards(r, dungeonName){
-    const got = { gold:0, stone:0, shard:0, advStone:0 };
+    const got = {};
     const roll = ([a,b]) => Math.floor(Math.random() * (b - a + 1)) + a;
 
-    if (r.gold)  { got.gold  = roll(r.gold);  w.player.gold  = (w.player.gold || 0) + got.gold; }
-    if (r.stone) { got.stone = roll(r.stone); w.player.stone = (w.player.stone || 0) + got.stone; }
-    if (r.shard) {
-      got.shard = roll(r.shard);
-      if (typeof w.addItem === "function") w.addItem("元素碎片", got.shard);
-      else {
-        w.player._bag = w.player._bag || {};
-        w.player._bag["元素碎片"] = (w.player._bag["元素碎片"] || 0) + got.shard;
-      }
-    }
-    if (r.advStone) {
-      got.advStone = roll(r.advStone);
-      if (typeof w.addItem === "function") w.addItem("進階石", got.advStone);
-      else {
-        w.player._bag = w.player._bag || {};
-        w.player._bag["進階石"] = (w.player._bag["進階石"] || 0) + got.advStone;
-      }
-    }
+    Object.keys(r || {}).forEach(key => {
+      const range = r[key];
+      if (!Array.isArray(range) || range.length < 2) return;
+      const n = roll(range);
+      if (n <= 0) return;
 
-    const parts = [];
-    if (r.gold)     parts.push(`金幣×${(got.gold||0).toLocaleString()}`);
-    if (r.stone)    parts.push(`強化石×${(got.stone||0).toLocaleString()}`);
-    if (r.shard)    parts.push(`元素碎片×${got.shard||0}`);
-    if (r.advStone) parts.push(`進階石×${got.advStone||0}`);
+      // 特例：資源型（不進背包）
+      if (key === "金幣" || key === "gold") {
+        w.player.gold = (w.player.gold || 0) + n;
+        got["金幣"] = (got["金幣"] || 0) + n;
+        return;
+      }
+      if (key === "強化石" || key === "stone") {
+        w.player.stone = (w.player.stone || 0) + n;
+        got["強化石"] = (got["強化石"] || 0) + n;
+        return;
+      }
+
+      // 舊鍵名 → 中文顯示名
+      const displayName =
+        key === "shard"    ? "元素碎片" :
+        key === "advStone" ? "進階石"   :
+        key; // 其他鍵：用原鍵名（可為中文）
+
+      if (typeof w.addItem === "function") {
+        w.addItem(displayName, n);
+      } else {
+        w.player._bag = w.player._bag || {};
+        w.player._bag[displayName] = (w.player._bag[displayName] || 0) + n;
+      }
+      got[displayName] = (got[displayName] || 0) + n;
+    });
+
+    const parts = Object.keys(got).map(name => `${name}×${got[name].toLocaleString()}`);
     w.updateResourceUI?.();
     w.logPrepend?.(parts.length
       ? `🏆 通關 ${dungeonName}：獲得 ${parts.join("、")}`

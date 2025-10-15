@@ -55,16 +55,32 @@
   loadState();
 
   // ---- 單一恢復力（小數，例 0.38 = +38%）----
-  function getRecoveryPower(){
-    var p = 0;
-    if (player && typeof player.RecoveryPower === 'number') p = player.RecoveryPower;
-    else if (player && typeof player.recoverPowerPercent === 'number') p = player.recoverPowerPercent;
-    else if (player && typeof player.recoverPercent === 'number') {
-      p = player.recoverPercent; if (p > 1 && p <= 100) p /= 100;
-    }
-    if (!isFinite(p) || p < 0) p = 0;
-    return p;
+  // 可調：藥水吃回復力的權重（1.0 = 100%；若要跟被動恢復一致吃 30%，改成 0.30）
+var POTION_EAT_RATIO = 1.0;
+
+function getRecoveryPower(){
+  var p = 0;
+
+  // 1) 首選：統一總合（base+skill+core，已做上限）
+  if (player && player.totalStats && typeof player.totalStats.recoverPercent === 'number') {
+    p = player.totalStats.recoverPercent;
   }
+  // 2) 相容回退：舊欄位（基礎）
+  else if (player && typeof player.recoverPercentBaseDecimal === 'number') {
+    p = player.recoverPercentBaseDecimal;
+  }
+  // 3) 最後回退：舊的 recoverPercent（可能是百分比或小數）
+  else if (player && typeof player.recoverPercent === 'number') {
+    p = player.recoverPercent;
+    if (p > 1 && p <= 100) p /= 100; // 舊檔百分比
+  }
+
+  if (!isFinite(p) || p < 0) p = 0;
+  // 夾斷 0~1，並套用藥水的吃入權重
+
+ p = Math.max(0, p);
+return p * POTION_EAT_RATIO;
+}
 
   // ---- 藥水清單（新增藥水就加一條）----
   var ITEMS = {

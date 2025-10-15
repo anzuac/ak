@@ -71,6 +71,7 @@
     wavesTemplate: STR_NORMAL_WAVES,
     hardWavesTemplate: STR_HARD_WAVES,
     rewardsNormal: { "飾品強化石": [1, 5] },
+    
     rewardsHard:   { "飾品強化石": [3, 8] }
   };
 

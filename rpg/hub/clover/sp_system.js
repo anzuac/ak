@@ -12,7 +12,7 @@
   const REDEEM_ITEM_ID = "sp點數券";
   const REDEEM_POINTS_PER_ITEM = 1;
 
-  // 數值點數上限
+  // 數值點數上限（含％型：這些走「每點固定%數」）
   const STAT_LIMITS = {
     hp: 2000, 
     mp: 200, 
@@ -24,6 +24,11 @@
     exp: 200, 
     drop: 200,
     gold: 200,
+    // 🔰 新增（％型）
+    skillDamage: 250,   // +0.1% / 點
+    totalDamage: 300,   // +0.1% / 點
+    recover: 300,       // +0.1% / 點 → recoverPercent
+    ignoreDef: 100      // +0.3% / 點 → ignoreDefPct
   };
 
   // 百分比點數上限（每點是固定%數，見 PERCENT_BONUS_PER_POINT）
@@ -31,13 +36,19 @@
     hp: 300, 
     mp: 100, 
     atk: 300, 
-    def: 200 };
+    def: 200
+  };
 
   // 顯示名稱
   const NAMES = {
     hp: "HP", mp: "MP", atk: "攻擊力", def: "防禦力",
     crit: "爆擊率", critDmg: "爆擊傷害", aspd: "攻擊速度",
     exp: "經驗值", drop: "掉落率", gold: "金幣掉落率",
+    // 🔰 新增
+    skillDamage: "技能傷害",
+    totalDamage: "總傷害",
+    recover: "回復提升",
+    ignoreDef: "穿透防禦力"
   };
   const PERCENT_NAMES = { hp: "HP%", mp: "MP%", atk: "攻擊力%", def: "防禦力%" };
 
@@ -45,12 +56,17 @@
   const FIXED_POINTS_BONUS = {
     atk: 5,
     def: 3,
-    crit: 0.001,     // +0.1% / 點
-    critDmg: 0.002,  // +0.2% / 點
-    aspd: 0.0005,    // +0.05 / 點
-    exp: 0.005,       // +0.5% / 點
-    drop: 0.005,      // +0.5% / 點
-    gold: 0.005,      // +0.5% / 點
+    crit: 0.001,       // +0.1% / 點
+    critDmg: 0.002,    // +0.2% / 點
+    aspd: 0.0005,      // +0.05 / 點
+    exp: 0.005,        // +0.5% / 點
+    drop: 0.005,       // +0.5% / 點
+    gold: 0.005,       // +0.5% / 點
+    // 🔰 新增（％型）
+    skillDamage: 0.001, // +0.1% / 點
+    totalDamage: 0.001, // +0.1% / 點
+    recover: 0.001,     // +0.1% / 點 → recoverPercent
+    ignoreDef: 0.003    // +0.3% / 點 → ignoreDefPct
   };
 
   // 百分比效益（每點提供的%數；用來「放大自己用 SP 投資的數值」）
@@ -58,7 +74,7 @@
     hp: 0.01, 
     mp: 0.01, 
     atk: 0.01, 
-    def: 0.01,  // 每點 +1%
+    def: 0.01  // 每點 +1%
   };
 
   // 取得父系職業（保險版）
@@ -82,9 +98,14 @@
   const SP = {
     total: 0,
     unspent: 0,
-    // 數值型投資（flat）
-    stats: { hp:0, mp:0, atk:0, def:0, crit:0, critDmg:0, aspd:0, exp:0, drop:0, gold:0 },
-    // 百分比投資（percent）
+    // 數值型投資（flat / ％混合，統一走 stats）
+    stats: {
+      hp:0, mp:0, atk:0, def:0,
+      crit:0, critDmg:0, aspd:0, exp:0, drop:0, gold:0,
+      // 🔰 新增（％型）
+      skillDamage:0, totalDamage:0, recover:0, ignoreDef:0
+    },
+    // 百分比投資（用來放大自己投入的四圍 SP）
     percents: { hp:0, mp:0, atk:0, def:0 }
   };
 
@@ -106,19 +127,30 @@
     const atkPercent = Math.floor(atkFromSp * ((percents.atk || 0) * (PCT.atk || 0)));
     const defPercent = Math.floor(defFromSp * ((percents.def || 0) * (PCT.def || 0)));
 
+    // 其他屬性：維持你原規則（每點固定%）
+    const critRate       = (points.crit || 0)    * (FX.crit || 0);
+    const critMultiplier = (points.critDmg || 0) * (FX.critDmg || 0);
+    const attackSpeedPct = (points.aspd || 0)    * (FX.aspd || 0);
+    const expBonus       = (points.exp  || 0)    * (FX.exp  || 0);
+    const dropBonus      = (points.drop || 0)    * (FX.drop || 0);
+    const goldBonus      = (points.gold || 0)    * (FX.gold || 0);
+
+    // 🔰 新增（每點固定%）
+    const skillDamage    = (points.skillDamage || 0) * (FX.skillDamage || 0);
+    const totalDamage    = (points.totalDamage || 0) * (FX.totalDamage || 0);
+    const recoverPercent = (points.recover     || 0) * (FX.recover     || 0);
+    const ignoreDefPct   = (points.ignoreDef   || 0) * (FX.ignoreDef   || 0);
+
     return {
       hp:  { flat: hpFromSp,  percent: hpPercent,  total: hpFromSp  + hpPercent },
       mp:  { flat: mpFromSp,  percent: mpPercent,  total: mpFromSp  + mpPercent },
       atk: { flat: atkFromSp, percent: atkPercent, total: atkFromSp + atkPercent },
       def: { flat: defFromSp, percent: defPercent, total: defFromSp + defPercent },
 
-      // 其餘屬性：維持你原規則（每點固定）
-      critRate:       (points.crit || 0)    * (FX.crit || 0),
-      critMultiplier: (points.critDmg || 0) * (FX.critDmg || 0),
-      attackSpeedPct: (points.aspd || 0)    * (FX.aspd || 0),
-      expBonus:       (points.exp  || 0)    * (FX.exp  || 0),
-      dropBonus:      (points.drop || 0)    * (FX.drop || 0),
-      goldBonus:      (points.gold || 0)    * (FX.gold || 0),
+      critRate, critMultiplier, attackSpeedPct, expBonus, dropBonus, goldBonus,
+
+      // 🔰 新增
+      skillDamage, totalDamage, recoverPercent, ignoreDefPct
     };
   }
 
@@ -133,12 +165,19 @@
       atk:  { base: Number(total.atk || 0), flat: c.atk.flat, percent: c.atk.percent, bonus: c.atk.total },
       def:  { base: Number(total.def || 0), flat: c.def.flat, percent: c.def.percent, bonus: c.def.total },
 
-      crit:    { base: Number(total.critRate || 0),       bonus: c.critRate },
-      critDmg: { base: Number(total.critMultiplier || 0), bonus: c.critMultiplier },
-      aspd:    { base: Number(total.attackSpeedPct || 0), bonus: c.attackSpeedPct },
+      // 右側百分比（base 值已含 SP）
+      crit:    { base: Number(total.critRate || 0),          bonus: c.critRate },
+      critDmg: { base: Number(total.critMultiplier || 0),    bonus: c.critMultiplier },
+      aspd:    { base: Number(total.attackSpeedPct || 0),    bonus: c.attackSpeedPct },
       exp:     { base: Number((w.player?.expRateBonus)  || 0), bonus: c.expBonus  },
       drop:    { base: Number((w.player?.dropRateBonus) || 0), bonus: c.dropBonus },
       gold:    { base: Number((w.player?.goldRateBonus) || 0), bonus: c.goldBonus },
+
+      // 🔰 新增的四項（base 值取自 totalStats）
+      skillDamage: { base: Number(total.skillDamage || 0),    bonus: c.skillDamage },
+      totalDamage: { base: Number(total.totalDamage || 0),    bonus: c.totalDamage },
+      recover:     { base: Number(total.recoverPercent || 0), bonus: c.recoverPercent },
+      ignoreDef:   { base: Number(total.ignoreDefPct || 0),   bonus: c.ignoreDefPct }
     };
   }
 
@@ -154,7 +193,11 @@
       if (!obj || typeof obj !== "object") return;
       SP.total   = Number(obj.total)   || 0;
       SP.unspent = Number(obj.unspent) || 0;
-      SP.stats   = Object.assign({ hp:0, mp:0, atk:0, def:0, crit:0, critDmg:0, aspd:0, exp:0, drop:0, gold:0 }, obj.stats || {});
+      SP.stats   = Object.assign({
+        hp:0, mp:0, atk:0, def:0,
+        crit:0, critDmg:0, aspd:0, exp:0, drop:0, gold:0,
+        skillDamage:0, totalDamage:0, recover:0, ignoreDef:0
+      }, obj.stats || {});
       SP.percents= Object.assign({ hp:0, mp:0, atk:0, def:0 }, obj.percents || {});
     } catch(_) {}
   }
@@ -168,7 +211,12 @@
       hp: c.hp.total, mp: c.mp.total, atk: c.atk.total, def: c.def.total,
       critRate: c.critRate, critMultiplier: c.critMultiplier,
       attackSpeedPct: c.attackSpeedPct, expBonus: c.expBonus,
-      dropBonus: c.dropBonus, goldBonus: c.goldBonus
+      dropBonus: c.dropBonus, goldBonus: c.goldBonus,
+      // 🔰 新增，與 player.totalStats 對應的鍵
+      skillDamage: c.skillDamage,
+      totalDamage: c.totalDamage,
+      recoverPercent: c.recoverPercent,
+      ignoreDefPct: c.ignoreDefPct
     };
     w.updateResourceUI?.();
   }
@@ -229,7 +277,7 @@
     redeemContainer.appendChild(redeemRow);
 
     const statHeader = document.createElement("h4");
-    statHeader.textContent = "數值點數（每點直加）";
+    statHeader.textContent = "數值點數（每點直加 / 每點固定%）";
     statHeader.style.cssText = "margin: 0 0 10px;";
 
     // 數值點數表格
@@ -240,7 +288,7 @@
     `;
 
     const percentHeader = document.createElement("h4");
-    percentHeader.textContent = "百分比點數（放大「自己投資的 SP 數值」）";
+    percentHeader.textContent = "百分比點數（放大「自己投資的四圍 SP」）";
     percentHeader.style.cssText = "margin: 10px 0; border-top: 1px solid #333; padding-top: 8px;";
 
     // 百分比點數表格
@@ -261,7 +309,7 @@
     appendHeadRow($statContent);
     appendHeadRow($percentContent);
 
-    // 數值列
+    // 數值列（含％型）
     function addStatRow(key) {
       const name = document.createElement("div");
       name.id = `sp-stat-name-${key}`;
@@ -287,7 +335,7 @@
       $statContent.appendChild(btn10);
     }
 
-    // 百分比列
+    // 百分比列（四圍放大）
     function addPercentRow(key) {
       const name = document.createElement("div");
       name.id = `sp-percent-name-${key}`;
@@ -313,7 +361,8 @@
       $percentContent.appendChild(btn10);
     }
 
-    ["hp","mp","atk","def","crit","critDmg","aspd","exp","drop","gold"].forEach(addStatRow);
+    // 🔁 建列
+    ["hp","mp","atk","def","crit","critDmg","aspd","exp","drop","gold","skillDamage","totalDamage","recover","ignoreDef"].forEach(addStatRow);
     ["hp","mp","atk","def"].forEach(addPercentRow);
 
     // 總能力
@@ -321,6 +370,11 @@
     $totalStats.style.cssText = `margin-top: 10px; padding-top: 8px; border-top: 1px solid #333;`;
     $totalStats.innerHTML = `<h4 style="margin:0 0 10px;">總能力</h4>`;
 
+    // === 精簡版：戰鬥力（只顯示一行） ===
+    const $cpInline = document.createElement("div");
+    $cpInline.id = "sp-cp-inline";
+    $cpInline.style.cssText = "margin-top:6px;opacity:.9;";
+    $cpInline.innerHTML = `戰鬥力：<strong id="sp-cp-inline-val">—</strong>`;
     // footer
     const footer = document.createElement("div");
     footer.style.cssText = `display:flex; justify-content:flex-end; gap: 8px; margin-top: 10px;`;
@@ -331,22 +385,19 @@
     footer.appendChild(btnClose);
 
     // 組裝
-    wrap.appendChild(header);
-    wrap.appendChild(topBar);
-    wrap.appendChild(redeemContainer);
-    wrap.appendChild(statHeader);
-    wrap.appendChild($statContent);
-    wrap.appendChild(percentHeader);
-    wrap.appendChild($percentContent);
-        // === 精簡版：戰鬥力（只顯示一行） ===
-const $cpInline = document.createElement("div");
-$cpInline.id = "sp-cp-inline";
-$cpInline.style.cssText = "margin-top:6px;opacity:.9;";
-$cpInline.innerHTML = `戰鬥力：<strong id="sp-cp-inline-val">—</strong>`;
-wrap.appendChild($cpInline);
-    wrap.appendChild($totalStats);
+    const wrapTop = document.createElement("div");
+    wrapTop.appendChild(header);
+    wrapTop.appendChild(topBar);
+    wrapTop.appendChild(redeemContainer);
+    wrapTop.appendChild(statHeader);
+    wrapTop.appendChild($statContent);
+    wrapTop.appendChild(percentHeader);
+    wrapTop.appendChild($percentContent);
+    wrapTop.appendChild($cpInline);
+    wrapTop.appendChild($totalStats);
+    wrapTop.appendChild(footer);
 
-    wrap.appendChild(footer);
+    wrap.appendChild(wrapTop);
     $modal.appendChild(wrap);
     document.body.appendChild($modal);
 
@@ -356,7 +407,7 @@ wrap.appendChild($cpInline);
     $redeemBtn.addEventListener("click", redeemSpPoints);
   }
 
-function openSpModal() { ensureModal(); render(); refreshInlineCP(); $modal.style.display = "flex"; }
+  function openSpModal() { ensureModal(); render(); refreshInlineCP(); $modal.style.display = "flex"; }
   function closeSpModal() { if ($modal) $modal.style.display = "none"; }
 
   // ===== 操作 =====
@@ -457,7 +508,7 @@ function openSpModal() { ensureModal(); render(); refreshInlineCP(); $modal.styl
 
     // 顯示每點效益（% 類型的用百分比）
     let perStr = "";
-    if (["crit","critDmg","aspd","exp","drop","gold"].includes(key)) {
+    if (["crit","critDmg","aspd","exp","drop","gold","skillDamage","totalDamage","recover","ignoreDef"].includes(key)) {
       perStr = `（<strong>+${(per * 100).toFixed(2)}%</strong> / 點）`;
     } else if (per > 0) {
       perStr = `（<strong>+${Math.floor(per)}</strong> / 點）`;
@@ -487,71 +538,70 @@ function openSpModal() { ensureModal(); render(); refreshInlineCP(); $modal.styl
     if ($remain) $remain.innerHTML = `剩餘可分配：<strong>${SP.unspent}</strong> / 總點數：${SP.total}`;
   }
 
-function renderTotalStats() {
-  if (!$totalStats) return;
-  const total = computeTotalStats();
+  function renderTotalStats() {
+    if (!$totalStats) return;
+    const total = computeTotalStats();
 
-  let html = `<h4 style="margin:0 0 10px;">總能力</h4>`;
+    let html = `<h4 style="margin:0 0 10px;">總能力</h4>`;
 
-  // 四大屬性：base 已含 SP，這裡「只顯示」不再相加
-  ["hp","mp","atk","def"].forEach(key => {
-    const row = total[key]; if (!row) return;
+    // 四大屬性：base 已含 SP，這裡「只顯示」不再相加
+    ["hp","mp","atk","def"].forEach(key => {
+      const row = total[key]; if (!row) return;
 
-    const finalVal = Math.floor(row.base);                 // ✅ 當前最終值（已含 SP）
-    const baseBeforeSp = Math.max(0, Math.floor(row.base - row.bonus)); // 加 SP 前的基礎
-    const flatSp = Math.floor(row.flat);                   // SP 直加
-    const pctSp  = (Number(row.percent) || 0).toFixed(2);  // SP% 顯示小數兩位
+      const finalVal = Math.floor(row.base);                 // ✅ 當前最終值（已含 SP）
+      const baseBeforeSp = Math.max(0, Math.floor(row.base - row.bonus)); // 加 SP 前的基礎
+      const flatSp = Math.floor(row.flat);                   // SP 直加
+      const pctSp  = (Number(row.percent) || 0).toFixed(2);  // SP% 顯示
 
-    html += `<div style="margin-bottom:4px;">${NAMES[key]}:
-      <strong>${finalVal}</strong>
-      (<span style="color:#ccc;">基礎 ${baseBeforeSp}</span>
-       <span style="color:#5af;">+${flatSp} SP</span>
-       <span style="color:#fa5;">+${pctSp} SP%</span>)</div>`;
-  });
+      html += `<div style="margin-bottom:4px;">${NAMES[key]}:
+        <strong>${finalVal}</strong>
+        (<span style="color:#ccc;">基礎 ${baseBeforeSp}</span>
+         <span style="color:#5af;">+${flatSp} SP</span>
+         <span style="color:#fa5;">+${pctSp} SP%</span>)</div>`;
+    });
 
-  // 其他百分比屬性（右邊這些本來就是百分比，base 已含 SP）
-  ["crit","critDmg","aspd","exp","drop","gold"].forEach(key => {
-    const row = total[key]; if (!row) return;
-    const finalPct = (Number(row.base)  * 100).toFixed(2) + "%"; // 已含 SP
-    const spDelta  = (Number(row.bonus) * 100).toFixed(2);       // 其中 SP 帶來的增量
-    html += `<div style="margin-bottom:4px;">${NAMES[key]}:
-      <strong>${finalPct}</strong>${row.bonus>0 ? ` <span style="color:#5f9;">(+${spDelta}%)</span>` : ""}</div>`;
-  });
+    // 其他百分比屬性（base 已含 SP）
+    ["crit","critDmg","aspd","exp","drop","gold","skillDamage","totalDamage","recover","ignoreDef"].forEach(key => {
+      const row = total[key]; if (!row) return;
+      const finalPct = (Number(row.base)  * 100).toFixed(2) + "%"; // 已含 SP
+      const spDelta  = (Number(row.bonus) * 100).toFixed(2);       // 其中 SP 帶來的增量
+      html += `<div style="margin-bottom:4px;">${NAMES[key]}:
+        <strong>${finalPct}</strong>${row.bonus>0 ? ` <span style="color:#5f9;">(+${spDelta}%)</span>` : ""}</div>`;
+    });
 
-  $totalStats.innerHTML = html;
-}
-function refreshInlineCP() {
-  const el = document.getElementById("sp-cp-inline-val");
-  if (!el) return;
-
-  let cp = null;
-
-  // 先用你主頁已有的函式（若有）
-  if (typeof window.getDisplayedCombatPower === "function") {
-    try { cp = window.getDisplayedCombatPower(); } catch(_) {}
-  }
-  if (cp == null && typeof window.computeCombatPower === "function") {
-    try { cp = window.computeCombatPower(); } catch(_) {}
+    $totalStats.innerHTML = html;
   }
 
-  // 再嘗試從主頁 DOM 讀（把選擇器換成你主頁的戰力元素）
-  if (cp == null) {
-    const node =
-      document.getElementById("cp-value") ||
-      document.getElementById("combat-power") ||
-      document.querySelector("[data-cp]") ||
-      document.querySelector(".cp-value");
-    if (node) {
-      const num = String(node.textContent || "").replace(/[^\d]/g, "");
-      if (num) cp = parseInt(num, 10);
+  function refreshInlineCP() {
+    const el = document.getElementById("sp-cp-inline-val");
+    if (!el) return;
+
+    let cp = null;
+
+    if (typeof window.getDisplayedCombatPower === "function") {
+      try { cp = window.getDisplayedCombatPower(); } catch(_) {}
     }
+    if (cp == null && typeof window.computeCombatPower === "function") {
+      try { cp = window.computeCombatPower(); } catch(_) {}
+    }
+    if (cp == null) {
+      const node =
+        document.getElementById("cp-value") ||
+        document.getElementById("combat-power") ||
+        document.querySelector("[data-cp]") ||
+        document.querySelector(".cp-value");
+      if (node) {
+        const num = String(node.textContent || "").replace(/[^\d]/g, "");
+        if (num) cp = parseInt(num, 10);
+      }
+    }
+
+    if (cp == null || isNaN(cp)) cp = 0;
+    el.textContent = cp;
   }
 
-  if (cp == null || isNaN(cp)) cp = 0;
-  el.textContent = cp;
-}
   function render() {
-    ["hp","mp","atk","def","crit","critDmg","aspd","exp","drop","gold"].forEach(key => {
+    ["hp","mp","atk","def","crit","critDmg","aspd","exp","drop","gold","skillDamage","totalDamage","recover","ignoreDef"].forEach(key => {
       renderName(key);
       renderRow(key);
     });
@@ -575,7 +625,7 @@ function refreshInlineCP() {
     }
   }
 
-// ===== 初始化 =====
+  // ===== 初始化 =====
   function init() {
     loadLocal();
     ensureModal();
