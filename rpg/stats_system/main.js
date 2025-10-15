@@ -1,5 +1,6 @@
 // =======================
 // main.js (整合修正版 - 無職業回退/轉換 / 暱稱限制版)
+// 新增：在 UI 顯示 totalDamage（總傷害）
 // =======================
 
 // === 暱稱限制與工具 ===
@@ -14,87 +15,47 @@ function sanitizeNickname(input) {
 }
 
 // --- 小工具：安全取得 baseJob（utils_jobs.js 未載入就退回原 job） ---
-function getBaseJobSafe(job) { // [CHANGED] 新增的小工具，不會影響其他功能
+function getBaseJobSafe(job) {
   const j = (job || "").toLowerCase();
   return (typeof window.getBaseJob === "function") ? window.getBaseJob(j) : j;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (window.__BOOT_DONE__) return;     // ← 防止重複啟動
-  window.__BOOT_DONE__ = true;          // ← 標記這輪已啟動
-
-  // 你的原本流程保持：先 init，再嘗試載入
-  initPlayer();
-  const hasSave = loadGame(); // 回傳 true/false，下面照舊
-  const setupModal = document.getElementById('gameSetupModal');
-
-  if (hasSave) {
-    if (setupModal) setupModal.style.display = 'none';
-    updateResourceUI();
-    refreshMageOnlyUI();
-    rebuildActiveSkills();
-    ensureSkillEvolution?.();
-    renderSkillPanel?.();
-    console.log("已載入存檔，跳過角色設定。");
-  } else {
-    if (setupModal) setupModal.style.display = 'flex';
-    console.log("沒有找到存檔，顯示角色設定畫面。");
-  }
-
-  // 後面你的暱稱長度限制、refreshMageOnlyUI() 等維持不動
-
-    // 限制暱稱輸入長度 + 簡易提示
-    const nickInput = document.getElementById('nicknameInput');
-    if (nickInput) {
-        nickInput.maxLength = NICKNAME_MAX_LEN;
-        if (!nickInput.placeholder || /輸入你的暱稱/.test(nickInput.placeholder)) {
-            nickInput.placeholder = `請輸入暱稱（${NICKNAME_MIN_LEN}-${NICKNAME_MAX_LEN} 字）`;
-        }
-    }
-
-    // 每次載入都執行
-    refreshMageOnlyUI();
-});
-
-
-function startGame() {
-  const rawNickname = document.getElementById('nicknameInput').value;
-  const job = document.getElementById('jobSelect').value;
-
-  // 淨化 + 嚴格檢查
-  const nickname = sanitizeNickname(rawNickname);
-  if (!nickname) { alert("暱稱不能為空！"); return; }
-  if (nickname.length < NICKNAME_MIN_LEN) { alert(`暱稱至少需要 ${NICKNAME_MIN_LEN} 個字`); return; }
-  if (nickname.length > NICKNAME_MAX_LEN) { alert(`暱稱最多 ${NICKNAME_MAX_LEN} 個字`); return; }
-
-  player.nickname = nickname;
-  player.job = job;
-
-  // ====== 新增邏輯：只在第一次創建角色時歸零資源 ======
-  // 我們不需要在每次呼叫 startGame 時都重置資源
-  // 遊戲的資源應該由其他函式來管理
-  
-  initRecoverySystem?.();
-  const modal = document.getElementById('gameSetupModal');
-  if (modal) modal.style.display = 'none';
-
-  initPlayer();
-  updateResourceUI();
-  refreshMageOnlyUI();
-  rebuildActiveSkills();
-  ensureSkillEvolution?.();
-  renderSkillPanel?.();
-
-  // 這一行是關鍵！請確認它已經存在！
-  saveGame(); 
+function isMage() {
+  return getBaseJobSafe(player.job) === "mage";
 }
 
+function toggleMagicShield() {
+  if (!isMage()) { alert("只有法師可以使用魔力護盾"); return; }
+  player.magicShieldEnabled = !player.magicShieldEnabled;
+  player.manaShieldEnabled  = player.magicShieldEnabled; // 兼容舊欄位
+  const btn = document.getElementById("manaShieldBtn");
+  if (btn) btn.textContent = "🛡️ 魔力護盾：" + (player.magicShieldEnabled ? "開" : "關");
+  updateResourceUI();
+}
+
+function refreshMageOnlyUI() {
+  const row = document.getElementById("manaShieldRow");
+  const btn = document.getElementById("manaShieldBtn");
+  const mage = isMage();
+
+  if (row) row.style.display = mage ? "" : "none";
+  if (btn) {
+    btn.style.display = mage ? "" : "none";
+    btn.textContent = "🛡️ 魔力護盾：" + (player.magicShieldEnabled ? "開" : "關");
+  }
+
+  if (!mage) {
+    player.magicShieldEnabled = false;
+    player.manaShieldEnabled  = false; // 舊欄位同步
+  }
+}
 
 // 統一顯示：保留兩位小數（含 .00）
 function fmt2(x) {
   const n = Number(x);
   return isNaN(n) ? "0.00" : n.toFixed(2);
 }
+
 function updateResourceUI() {
   const maxHp = player.totalStats.hp;
   const maxMp = player.totalStats.mp;
@@ -138,9 +99,10 @@ function updateResourceUI() {
   const lukEl = document.getElementById("luk-display");
 
   if (strEl) strEl.textContent = `${fmt2(totalStr)} (${fmt2(player.baseStats.str)} + ${fmt2(eqStr)})`;
-if (agiEl) agiEl.textContent = `${fmt2(totalAgi)} (${fmt2(player.baseStats.agi)} + ${fmt2(eqAgi)})`;
-if (intEl) intEl.textContent = `${fmt2(totalInt)} (${fmt2(player.baseStats.int)} + ${fmt2(eqInt)})`;
-if (lukEl) lukEl.textContent = `${fmt2(totalLuk)} (${fmt2(player.baseStats.luk)} + ${fmt2(eqLuk)})`;
+  if (agiEl) agiEl.textContent = `${fmt2(totalAgi)} (${fmt2(player.baseStats.agi)} + ${fmt2(eqAgi)})`;
+  if (intEl) intEl.textContent = `${fmt2(totalInt)} (${fmt2(player.baseStats.int)} + ${fmt2(eqInt)})`;
+  if (lukEl) lukEl.textContent = `${fmt2(totalLuk)} (${fmt2(player.baseStats.luk)} + ${fmt2(eqLuk)})`;
+
   // 狀態圖示
   let statusText = "";
   if (player.statusEffects) {
@@ -202,7 +164,6 @@ if (lukEl) lukEl.textContent = `${fmt2(totalLuk)} (${fmt2(player.baseStats.luk)}
   const comboRow = document.getElementById("comboRateRow");
   const comboVal = document.getElementById("comboRate");
   if (comboRow && comboVal) {
-    // [CHANGED] 用 baseJob 判斷，讓 thief2/3/4/5 也顯示
     const baseJob = getBaseJobSafe(player.job);
     if (baseJob === "thief") {
       comboRow.style.display = "";
@@ -217,11 +178,10 @@ if (lukEl) lukEl.textContent = `${fmt2(totalLuk)} (${fmt2(player.baseStats.luk)}
   const msBtn = document.getElementById("manaShieldBtn");
   const msPctEl = document.getElementById("manaShieldPct");
 
-  const mage = isMage(); // [CHANGED] isMage 內部改用 baseJob
+  const mage = isMage();
   if (msRow) msRow.style.display = mage ? "" : "none";
   if (msBtn) msBtn.style.display = mage ? "" : "none";
 
-  // 舊欄位相容（可留）
   if (typeof player.manaShieldEnabled === "boolean" && player.manaShieldEnabled !== player.magicShieldEnabled) {
     player.magicShieldEnabled = player.manaShieldEnabled;
   }
@@ -241,55 +201,40 @@ if (lukEl) lukEl.textContent = `${fmt2(totalLuk)} (${fmt2(player.baseStats.luk)}
   G("shield", player.shield || 0);
   G("critRate", (player.totalStats.critRate * 100).toFixed(1) + '%');
   G("critMultiplier", (player.totalStats.critMultiplier * 100).toFixed(1) + '%');
-  // 注意：你的 totalStats.damageReduce 是小數(0~0.6)，顯示成百分比
   G("damageReduce", (player.totalStats.damageReduce * 100).toFixed(1) + '%');
+
+  // 🔰 新增：總傷害（百分比顯示）
+// 總傷害 / 穿防
+G("totalDamage", ((player.totalStats.totalDamage || 0) * 100).toFixed(1) + "%");
+G("ignoreDefPct", ((player.totalStats.ignoreDefPct || 0) * 100).toFixed(1) + "%");
+G("ignoreDefFlat", Math.floor(player.totalStats.ignoreDefFlat || 0));
 }
 
-function initPlayer() {
-  if (typeof player === "undefined") return setTimeout(initPlayer, 50);
-  if (typeof applyElementEquipmentBonusToPlayer === 'function') applyElementEquipmentBonusToPlayer();
-  player.expToNext = getExpToNext(player.level);
-  player.currentHP = player.totalStats.hp;
-  player.currentMP = player.totalStats.mp;
-  startAutoRecover();
-  createStatModal();
+function startGame() {
+  const rawNickname = document.getElementById('nicknameInput').value;
+  const job = document.getElementById('jobSelect').value;
+
+  const nickname = sanitizeNickname(rawNickname);
+  if (!nickname) { alert("暱稱不能為空！"); return; }
+  if (nickname.length < NICKNAME_MIN_LEN) { alert(`暱稱至少需要 ${NICKNAME_MIN_LEN} 個字`); return; }
+  if (nickname.length > NICKNAME_MAX_LEN) { alert(`暱稱最多 ${NICKNAME_MAX_LEN} 個字`); return; }
+
+  player.nickname = nickname;
+  player.job = job;
+
+  initRecoverySystem?.();
+  const modal = document.getElementById('gameSetupModal');
+  if (modal) modal.style.display = 'none';
+
+  initPlayer();
   updateResourceUI();
   refreshMageOnlyUI();
+  rebuildActiveSkills?.();
+  ensureSkillEvolution?.();
+  renderSkillPanel?.();
+  saveGame?.();
 }
 
-// ====== 法師專用 UI/邏輯 ======
-function isMage() {
-  // [CHANGED] 用 baseJob 判斷（轉職後仍視為法師系）
-  return getBaseJobSafe(player.job) === "mage";
-}
-
-function toggleMagicShield() {
-  if (!isMage()) { alert("只有法師可以使用魔力護盾"); return; }
-  player.magicShieldEnabled = !player.magicShieldEnabled;
-  player.manaShieldEnabled  = player.magicShieldEnabled; // 兼容舊欄位
-  const btn = document.getElementById("manaShieldBtn");
-  if (btn) btn.textContent = "🛡️ 魔力護盾：" + (player.magicShieldEnabled ? "開" : "關");
-  updateResourceUI();
-}
-
-function refreshMageOnlyUI() {
-  const row = document.getElementById("manaShieldRow");
-  const btn = document.getElementById("manaShieldBtn");
-  const mage = isMage();
-
-  if (row) row.style.display = mage ? "" : "none";
-  if (btn) {
-    btn.style.display = mage ? "" : "none";
-    btn.textContent = "🛡️ 魔力護盾：" + (player.magicShieldEnabled ? "開" : "關");
-  }
-
-  if (!mage) {
-    player.magicShieldEnabled = false;
-    player.manaShieldEnabled  = false; // 舊欄位同步
-  }
-}
-
-// ====== 顯示/隱藏：屬性分配區 & 進階能力 ======
 function toggleStatAlloc() {
   const area = document.getElementById('stat-alloc-area');
   const btn  = document.getElementById('toggleStatAllocBtn');
@@ -298,7 +243,6 @@ function toggleStatAlloc() {
   area.style.display = hidden ? '' : 'none';
   btn.textContent = hidden ? '隱藏' : '顯示';
 }
-// document.addEventListener('DOMContentLoaded', () => { toggleStatAlloc(); });
 
 function toggleExtraStats() {
   const area = document.getElementById('extra-stats');
@@ -309,7 +253,44 @@ function toggleExtraStats() {
   btn.textContent = hidden ? '隱藏' : '顯示';
 }
 
-// 🔑 確保 HTML 的 onclick 可呼叫（只新增這兩行）
-window.toggleStatAlloc = toggleStatAlloc;   // [EXPOSE]
-window.toggleExtraStats = toggleExtraStats; // [EXPOSE]
-window.toggleMagicShield = toggleMagicShield; // 原本就有，也保留
+// 🔑 確保 HTML 的 onclick 可呼叫
+window.toggleStatAlloc = toggleStatAlloc;
+window.toggleExtraStats = toggleExtraStats;
+window.toggleMagicShield = toggleMagicShield;
+window.startGame = startGame;
+
+// Boot
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.__BOOT_DONE__) return;     // 防止重複啟動
+  window.__BOOT_DONE__ = true;
+
+  // 先 init，再嘗試載入
+  initPlayer();
+  const hasSave = loadGame?.() || false;
+  const setupModal = document.getElementById('gameSetupModal');
+
+  if (hasSave) {
+    if (setupModal) setupModal.style.display = 'none';
+    updateResourceUI();
+    refreshMageOnlyUI();
+    rebuildActiveSkills?.();
+    ensureSkillEvolution?.();
+    renderSkillPanel?.();
+    console.log("已載入存檔，跳過角色設定。");
+  } else {
+    if (setupModal) setupModal.style.display = 'flex';
+    console.log("沒有找到存檔，顯示角色設定畫面。");
+  }
+
+  // 限制暱稱輸入長度 + 簡易提示
+  const nickInput = document.getElementById('nicknameInput');
+  if (nickInput) {
+    nickInput.maxLength = NICKNAME_MAX_LEN;
+    if (!nickInput.placeholder || /輸入你的暱稱/.test(nickInput.placeholder)) {
+      nickInput.placeholder = `請輸入暱稱（${NICKNAME_MIN_LEN}-${NICKNAME_MAX_LEN} 字）`;
+    }
+  }
+
+  // 每次載入都執行
+  refreshMageOnlyUI();
+});

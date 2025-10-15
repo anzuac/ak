@@ -1,10 +1,12 @@
 const GLOBAL_DROP_RATES = {
-  cube: { name: "轉職寶珠", rate: 0.05 },
+  cube: { name: "轉職寶珠", rate: 0.08 },
   s4: { name: "怪物獎牌", rate: 0.03 },
-  s2: { name: "進階石", rate: 0.02 },
-  s3: { name: "星之碎片", rate: 0.02 },
+  s2: { name: "進階石", rate: 0.005 },
+  s3: { name: "星之碎片", rate: 0.007 },
   star: { name: "衝星石", rate: 0.02 },
-  shard: { name: "元素碎片", rate: 0.05 }
+  shard: { name: "元素碎片", rate: 0.025 },
+  S4: { name: "生命藥水", rate: 0.034 },
+  s5: { name: "法力藥水", rate: 0.032 }
 };
 // ✅ 完整 monster_config.js 整合後版本
 
