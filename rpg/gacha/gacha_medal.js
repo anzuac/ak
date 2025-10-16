@@ -28,9 +28,9 @@
     { name: "低階潛能解放鑰匙", type: "item", key: "低階潛能解放鑰匙", min: 3, max: 15, prob: 0.0756 },
     { name: "中階潛能解放鑰匙", type: "item", key: "中階潛能解放鑰匙", min: 2, max: 8,  prob: 0.0504 },
     { name: "高階潛能解放鑰匙", type: "item", key: "高階潛能解放鑰匙", min: 1, max: 4,  prob: 0.0168 },
-    { name: "SP點數券", type: "item", key: "sp點數券",               min: 1, max: 2,  prob: 0.1092 },
-     { name: "生命藥水", type: "item", key: "生命藥水",               min: 1, max: 10,  prob: 0.01 },
-      { name: "法力藥水", type: "item", key: "法力藥水",               min: 1, max: 10,  prob: 0.01 },
+    { name: "SP點數券", type: "item", key: "sp點數券",               min: 1, max: 2,  prob: 0.0092 },
+     { name: "生命藥水", type: "item", key: "生命藥水",               min: 1, max: 10,  prob: 0.051 },
+      { name: "法力藥水", type: "item", key: "法力藥水",               min: 1, max: 10,  prob: 0.051 },
     // —— 新增獎項（固定占比 16%）——
     { name: "元素碎片", type: "item", key: "元素碎片", min: 1, max: 10, prob: 0.06 },
     { name: "衝星石",   type: "item", key: "衝星石",   min: 1, max: 3,  prob: 0.05 },
