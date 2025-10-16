@@ -4,7 +4,7 @@
 
 // 轉職等級與寶珠需求（從二轉開始）
 const JOB_CHANGE_REQUIREMENTS = [
-  { level: 30,  cost: 100 },  // 二轉
+  { level: 30,  cost: 25 },  // 二轉
   { level: 70,  cost: 200 },  // 三轉
   { level: 120, cost: 400 },  // 四轉
   { level: 200, cost: 800 },  // 五轉
