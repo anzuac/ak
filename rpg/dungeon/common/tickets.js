@@ -15,7 +15,7 @@
       ITEM_NAME: "資源票",
       PERIOD_MS: 30 * 60 * 1000,  // 每 30 分補 1 張
       DEFAULT_CAP: 20,
-      EXPAND_COST_GEM: 100,
+      EXPAND_COST_GEM: 0,
       EXPAND_DELTA: 5,
       GIFT_ON_EXPAND: 1
     },
