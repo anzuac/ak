@@ -9,7 +9,7 @@
   const KEY_BACKUP  = `${NS}:backup`;  // 上一次成功保存的備份
 
   // 舊制（自動轉寫 & 讀取用；不再寫入）
-  const OLD_NS = "GAME_SAVE_V16"; // 你的舊 A/B 制
+  const OLD_NS = "GAME_SAVE_V5"; // 你的舊 A/B 制
   const OLD_MANIFEST = `${OLD_NS}:manifest`;
   const OLD_SLOT_A   = `${OLD_NS}:slotA`;
   const OLD_SLOT_B   = `${OLD_NS}:slotB`;
