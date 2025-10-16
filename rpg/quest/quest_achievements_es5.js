@@ -460,6 +460,7 @@ function readSnapshot(){
       container.innerHTML = html;
     }
   };
+
   // —— 與 QuestCore 整合：切分頁時渲染 —— //
   document.addEventListener('quest:tabchange', function(){
     if (typeof window.QuestCore !== "object") return;
