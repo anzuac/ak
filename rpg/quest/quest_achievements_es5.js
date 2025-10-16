@@ -159,65 +159,74 @@
   function eliteStage(c){ return geoStage(c, ELITE_UNIT, GEO_GROWTH); }
   function bossStage(c){ return geoStage(c, BOSS_UNIT, GEO_GROWTH); }
   function dmgStage(d){ return geoStage(d, DAMAGE_UNIT, GEO_GROWTH); }
+// —— 讀玩家（只讀：基礎 + core；攻防不吃技能乘算）—— //
+function readSnapshot(){
+  var p = window.player || {};
+  var base = p.baseStats || {};
+  var core = p.coreBonus || {};
+  var jobs = window.jobs || {};
+  var jobKey = (p.job||"").toLowerCase();
+  var jm = (jobs[jobKey] && jobs[jobKey].statMultipliers) || {str:1,agi:1,int:1,luck:1};
 
-  // —— 讀玩家（只讀：基礎 + core；攻防不吃技能乘算）—— //
-  function readSnapshot(){
-    var p = window.player || {};
-    var base = p.baseStats || {};
-    var core = p.coreBonus || {};
-    var jobs = window.jobs || {};
-    var jobKey = (p.job||"").toLowerCase();
-    var jm = (jobs[jobKey] && jobs[jobKey].statMultipliers) || {str:1,agi:1,int:1,luck:1};
+  // 四圍（基礎 + core）
+  var totalStr = Number(base.str||0) + Number(core.str||0);
+  var totalAgi = Number(base.agi||0) + Number(core.agi||0);
+  var totalInt = Number(base.int||0) + Number(core.int||0);
+  var totalLuk = Number(base.luk||0) + Number(core.luk||0);
 
-    // 四圍（基礎 + core）
-    var totalStr = Number(base.str||0) + Number(core.str||0);
-    var totalAgi = Number(base.agi||0) + Number(core.agi||0);
-    var totalInt = Number(base.int||0) + Number(core.int||0);
-    var totalLuk = Number(base.luk||0) + Number(core.luk||0);
+  // 四圍轉攻防（不吃技能）
+  var atkByStats = totalStr*(5*jm.str) + totalAgi*(5*jm.agi) + totalInt*(5*jm.int) + totalLuk*(5*jm.luck);
+  var defByStats = totalStr*(3*jm.str) + totalAgi*(1.5*jm.agi) + totalInt*(1*jm.int) + totalLuk*(1.5*jm.luck);
 
-    // 四圍轉攻防（不吃技能）
-    var atkByStats = totalStr*(5*jm.str) + totalAgi*(5*jm.agi) + totalInt*(5*jm.int) + totalLuk*(5*jm.luck);
-    var defByStats = totalStr*(3*jm.str) + totalAgi*(1.5*jm.agi) + totalInt*(1*jm.int) + totalLuk*(1.5*jm.luck);
+  // 最終裝備攻防（不含技能乘）
+  var finalAtk = Math.floor(Number(base.atk||0) + Number(core.atk||0) + atkByStats);
+  var finalDef = Math.floor(Number(base.def||0) + Number(core.def||0) + defByStats);
 
-    // 最終裝備攻防（不含技能乘）
-    var finalAtk = Math.floor(Number(base.atk||0) + Number(core.atk||0) + atkByStats);
-    var finalDef = Math.floor(Number(base.def||0) + Number(core.def||0) + defByStats);
+  // 技能傷害（僅讀基礎+core）
+  var skillDmg = Number(p.baseSkillDamage||0) + Number(core.skillDamage||0);
 
-    // 技能傷害（僅讀基礎+core）
-    var skillDmg = Number(p.baseSkillDamage||0) + Number(core.skillDamage||0);
+  // 攻速增益（(base+core)-1）→ 顯示加成量
+  var aspdGain = Math.max(0, (Number(p.attackSpeedPctBase||1) + Number(core.attackSpeedPct||0)) - 1);
 
-    // 攻速增益（(base+core)-1）→ 顯示加成量
-    var aspdGain = Math.max(0, (Number(p.attackSpeedPctBase||1) + Number(core.attackSpeedPct||0)) - 1);
+  // ——「總傷害 加成」——
+  // 1) 優先讀你在 player.js 暴露的聚合值：player.totalStats.totalDamage
+  // 2) 若未就緒，後備計算：base + core + skill（相容新舊命名）
+  var totalDmgBonus =
+    (p.totalStats && typeof p.totalStats.totalDamage === "number")
+      ? Number(p.totalStats.totalDamage)
+      : (
+          Number(p.baseTotalDamage || 0) +
+          Number(core.totalDamage || 0) +
+          Number((p.skillBonus && p.skillBonus.totalDamage) || 0) +
+          // 兼容舊鍵名（若有遺留）
+          Number(p.baseFinalDamage || 0) +
+          Number(core.finalDamage || 0) +
+          Number(core.damageBonus || 0) +
+          Number(p.totalDamageBonus || 0)
+        );
 
-    // 「總傷害 加成」：允許多個命名以相容既有程式（任一存在即可）
-    var totalDmgBonus = 0
-      + Number(p.baseFinalDamage||0)
-      + Number(core.finalDamage||0)
-      + Number(core.damageBonus||0)
-      + Number(p.totalDamageBonus||0); // 預留別名
+  // 三率（僅 core）
+  var exp = Number(core.expBonus||0);
+  var drop = Number(core.dropBonus||0);
+  var gold = Number(core.goldBonus||0);
 
-    // 三率（僅 core）
-    var exp = Number(core.expBonus||0);
-    var drop = Number(core.dropBonus||0);
-    var gold = Number(core.goldBonus||0);
-
-    return {
-      level: Number(p.level||1),
-      prim: { str:totalStr, agi:totalAgi, int:totalInt, luk:totalLuk },
-      atkEquip: finalAtk,
-      defEquip: finalDef,
-      skill: skillDmg,
-      aspdGain: aspdGain,
-      totalDmgBonus: totalDmgBonus,
-      exp: exp,
-      drop: drop,
-      gold: gold,
-      kills: Number(state.counters.kills||0),
-      eliteKills: Number(state.counters.eliteKills||0),
-      bossKills: Number(state.counters.bossKills||0),
-      totalDamage: Number(state.counters.totalDamage||0)
-    };
-  }
+  return {
+    level: Number(p.level||1),
+    prim: { str:totalStr, agi:totalAgi, int:totalInt, luk:totalLuk },
+    atkEquip: finalAtk,
+    defEquip: finalDef,
+    skill: skillDmg,
+    aspdGain: aspdGain,
+    totalDmgBonus: totalDmgBonus, // ★ 已對準你的來源
+    exp: exp,
+    drop: drop,
+    gold: gold,
+    kills: Number(state.counters.kills||0),
+    eliteKills: Number(state.counters.eliteKills||0),
+    bossKills: Number(state.counters.bossKills||0),
+    totalDamage: Number(state.counters.totalDamage||0)
+  };
+}
 
   // —— 發獎 —— //
   function giveRewardFixed(perStage, stageDiff){
@@ -451,7 +460,6 @@
       container.innerHTML = html;
     }
   };
-
   // —— 與 QuestCore 整合：切分頁時渲染 —— //
   document.addEventListener('quest:tabchange', function(){
     if (typeof window.QuestCore !== "object") return;
