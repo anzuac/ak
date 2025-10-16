@@ -2,7 +2,7 @@
   "use strict";
   if (!w.TownHub || typeof w.TownHub.registerTab !== 'function') return;
 
-  // ===== 工具 =====
+  // ===== 小工具 =====
   function nowSec(){ return Math.floor(Date.now()/1000); }
   function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
   function toInt(n){ n=Number(n); return (isFinite(n)? Math.floor(n) : 0); }
@@ -14,7 +14,7 @@
   function getItemQuantity(name){ try{ return toInt(w.getItemQuantity? w.getItemQuantity(name):0);}catch(_){return 0;} }
   function removeItem(name, qty){ qty=toInt(qty||1); if(qty<=0) return; try{ w.removeItem && w.removeItem(name, qty); }catch(_){} }
 
-  // ★ 吐司提示
+  // ===== 吐司提示 =====
   function showToast(msg, isError){
     var id = 'toast-mini';
     var el = document.getElementById(id);
@@ -51,12 +51,14 @@
     return Math.max(0, Math.floor((next-now)/1000));
   }
 
-  // ★ 排序鍵與方向
+  // ===== 排序鍵與方向 =====
   var SORT_KEYS = ['name','rate','qty','cap']; // 名稱 / 機率 / 獲得數量 / 最大數量
   var SORT_LABEL = { name:'名稱', rate:'機率', qty:'獲得數量', cap:'最大數量' };
 
   // ===== 參數 =====
-  var LS_KEY='EXPLORE_SPLIT_V3_MULTI';
+  var LS_KEY='EXPLORE_SPLIT_V2_MULTI';
+  var SCHEMA_VER = 2; // v2: 加入排序狀態與票券欄位的保底修補
+
   var EXPLORE_TICK_SEC=60;          // 每隊每分鐘檢查一次
   var EXPLORE_CAP_PER_LV=0.10;      // 每級 +10% 每日上限
   var EXPLORE_MAX=20;               // 探索等級上限
@@ -71,7 +73,7 @@
   var RESET_TICKET_DAILY_FREE=1;        // 每天免費補發 1 張
   var RESET_TICKET_BASE_CAP=2;          // 免費票券基礎上限（與背包分離）
   var RESET_TICKET_UPGRADE_COST=10000;  // 擴充免費券上限費用
-  var ALLOW_EXPAND_RESET_CAP=false;     // 預設不開放
+  var ALLOW_EXPAND_RESET_CAP=false;     // 預設不開放（改 true 即可）
 
   // ===== 探索掉落表 =====
   var EXPLORE_TABLE=[
@@ -85,17 +87,20 @@
     {name:'衝星石',type:'item',key:'衝星石',cap:20,rate:0.05},
     {name:'星之碎片',type:'item',key:'星之碎片',cap:5,rate:0.003},
     {name:'怪物獎牌',type:'item',key:'怪物獎牌',cap:50,rate:0.05},
-    {name:'挑戰券',type:'item',key:'挑戰券',cap:5,rate:0.009},
-    {name:'資源票',type:'item',key:'資源票',cap:5,rate:0.009},
-    {name:'高級探索券',type:'item',key:'高級探索券',cap:5,rate:0.005}
+    {name:'挑戰券',type:'item',key:'挑戰券',cap:3,rate:0.009},
+    {name:'資源票',type:'item',key:'挑戰票',cap:3,rate:0.009},
+    {name:'高級探索券',type:'item',key:'高級探索券',cap:3,rate:0.009}
   ];
 
-  // ===== 狀態 =====
+  // ===== 狀態（獨立存檔 + 簡易遷移） =====
   var state=(function load(){
     try{
       var raw=localStorage.getItem(LS_KEY);
       if(!raw) return fresh();
       var o=JSON.parse(raw);
+      if (typeof o._ver !== 'number') o._ver = 1; // 早期無版本
+
+      // —— 統一補欄位 ——
       o.exploreLv=toInt(o.exploreLv||0);
       o.exploreUpStart=toInt(o.exploreUpStart||0);
       o.exploreLog=o.exploreLog||[];
@@ -105,15 +110,20 @@
       o.resetTicketCapBonus=toInt(o.resetTicketCapBonus||0);
       o.ticketDay=o.ticketDay||dailyKey();
       o.freeTickets=toInt(o.freeTickets||0);
-      // 排序
-      o.dropSortKey = o.dropSortKey || 'qty'; // name/rate/qty/cap
-      o.dropSortAsc = (o.dropSortAsc===true); // 預設降冪，只有 name 比較適合升冪
+      // 排序（v2 新增）
+      if (o._ver < 2){
+        if (!o.dropSortKey) o.dropSortKey = 'qty';
+        if (typeof o.dropSortAsc !== 'boolean') o.dropSortAsc = false;
+        o._ver = 2;
+      }
       migrateSquads(o);
+      saveLocalRaw(o); // 寫回帶版本
       return o;
     }catch(_){return fresh();}
 
     function fresh(){
       var s={
+        _ver: SCHEMA_VER,
         exploreLv:0,
         exploreUpStart:0,
         exploreLog:[],
@@ -128,14 +138,16 @@
         dropSortAsc:false
       };
       for(var i=0;i<SQUADS_BASE;i++) s.squads.push(newSquad(i));
+      saveLocalRaw(s);
       return s;
     }
     function migrateSquads(s){
       if(!s.squads.length){
         for(var i=0;i<SQUADS_BASE;i++) s.squads.push(newSquad(i));
       }
-      s.squads.forEach((q,j)=>{
+      s.squads.forEach(function(q,j){
         q.id=toInt(q.id||j);
+        q.name = q.name || ('隊伍 '+(q.id+1));
         q.enabled=(q.enabled!==false);
         q.lastTick=toInt(q.lastTick||nowSec());
         q._carry=toInt(q._carry||0);
@@ -144,7 +156,8 @@
   })();
 
   function newSquad(i){return{id:i,name:'隊伍 '+(i+1),enabled:true,lastTick:nowSec(),_carry:0};}
-  function saveLocal(){try{localStorage.setItem(LS_KEY,JSON.stringify(state));}catch(_){}}
+  function saveLocalRaw(obj){ try{ localStorage.setItem(LS_KEY, JSON.stringify(obj)); }catch(_){} }
+  function saveLocal(){ saveLocalRaw(state); }
   function dailyKey(){var d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();}
 
   // ===== 探索等級 & 掉落上限 =====
@@ -167,7 +180,7 @@
     if(remainUpgradeSec()>0) return;
     var cost=nextExploreCost();
     var gem=toInt(w.player && (w.player.gem||0));
-    if(gem<cost) return;
+    if(gem<cost){ showToast('鑽石不足', true); return; }
     w.player.gem=gem-cost;
     state.exploreUpStart=nowSec();
     saveLocal();upd();saveGame();
@@ -254,7 +267,7 @@
   function tryExpandResetCap(){
     if(!ALLOW_EXPAND_RESET_CAP) return false;
     var gem=toInt(w.player && (w.player.gem||0));
-    if(gem<RESET_TICKET_UPGRADE_COST) return false;
+    if(gem<RESET_TICKET_UPGRADE_COST) { showToast('鑽石不足', true); return false; }
     w.player.gem=gem-RESET_TICKET_UPGRADE_COST;
     state.resetTicketCapBonus=toInt(state.resetTicketCapBonus||0)+1;
     saveLocal(); upd(); saveGame();
@@ -299,7 +312,7 @@
 
     if(changed){ saveLocal(); upd(); saveGame(); }
 
-    try{ w.TownHub.requestRerender && w.TownHub.requestRerender(); }catch(_){}
+    try{ if (typeof _rerender === 'function') _rerender(); }catch(_){}
   }
 
   // ===== 排序 =====
@@ -334,6 +347,9 @@
   function remainPct(){ var rem=remainUpgradeSec(); if(rem<=0) return 0; return Math.floor(((EXPLORE_UP_HOURS-rem)/EXPLORE_UP_HOURS)*100); }
   function squadTickPct(q){ return Math.floor(((toInt(q._carry||0)%EXPLORE_TICK_SEC)/EXPLORE_TICK_SEC)*100); }
 
+  var _mounted = false, _container=null, _timer=null;
+  function _rerender(){ if(!_mounted||!_container) return; render(_container); }
+
   function render(container){
     var caps=todayCapBase();
 
@@ -343,7 +359,7 @@
       var rec=EXPLORE_TABLE[i];
       var used=toInt(state.dropsCount[i]||0);
       var cap=caps[i];
-      view.push({rec, idx:i, used, cap});
+      view.push({rec:rec, idx:i, used:used, cap:cap});
     }
     sortDrops(view);
 
@@ -448,7 +464,7 @@
         var before = remainUpgradeSec();
         tryUpgrade();
         if (remainUpgradeSec() > 0 && before === 0) showToast('開始升級探索等級');
-        w.TownHub.requestRerender && w.TownHub.requestRerender();
+        _rerender();
       };
     }
 
@@ -463,7 +479,7 @@
             break;
           }
         }
-        saveLocal(); w.TownHub.requestRerender && w.TownHub.requestRerender();
+        saveLocal(); _rerender();
       };
     }
 
@@ -479,11 +495,11 @@
         state.squads.push(ns);
         saveLocal(); upd(); saveGame();
         showToast('已解鎖新隊伍');
-        w.TownHub.requestRerender && w.TownHub.requestRerender();
+        _rerender();
       };
     }
 
-    // 使用重置券（永遠可點；沒券會吐司）
+    // 使用重置券（沒券會吐司）
     var br = byId('useResetTicket');
     if (br){
       br.onclick = function(){
@@ -492,10 +508,7 @@
           var prevText = br.textContent;
           br.textContent = '✓ 重置完成';
           showToast('重置完成，當日掉落上限已清空');
-          setTimeout(function(){
-            br.textContent = prevText;
-            w.TownHub.requestRerender && w.TownHub.requestRerender();
-          }, 1000);
+          setTimeout(function(){ br.textContent = prevText; _rerender(); }, 900);
           upd(); saveGame();
         } else {
           showToast('沒有可用的重置券', true);
@@ -507,35 +520,31 @@
     var bx = byId('expandResetCap');
     if (bx){
       bx.onclick = function(){
-        if (tryExpandResetCap()){
-          w.TownHub.requestRerender && w.TownHub.requestRerender();
-        }else{
-          if(!ALLOW_EXPAND_RESET_CAP) showToast('此功能尚未開放', true);
-          else showToast('鑽石不足', true);
-        }
+        var ok = tryExpandResetCap();
+        if (ok) _rerender();
       };
     }
 
-    // —— 排序控制（兩顆按鈕） ——
-    var keyBtn = byId('dropSortKeyBtn');
-    var orderBtn = byId('dropSortOrderBtn');
-    if (keyBtn){
-      keyBtn.onclick = function(){
+    // 排序：鍵/方向
+    var bk = byId('dropSortKeyBtn');
+    var bo = byId('dropSortOrderBtn');
+    if (bk){
+      bk.onclick = function(){
         var idx = SORT_KEYS.indexOf(state.dropSortKey||'qty');
-        idx = (idx+1) % SORT_KEYS.length;
+        if (idx < 0) idx = 0; idx = (idx+1) % SORT_KEYS.length;
         state.dropSortKey = SORT_KEYS[idx];
-        saveLocal();
-        w.TownHub.requestRerender && w.TownHub.requestRerender();
+        saveLocal(); _rerender();
       };
     }
-    if (orderBtn){
-      orderBtn.onclick = function(){
+    if (bo){
+      bo.onclick = function(){
         state.dropSortAsc = !state.dropSortAsc;
-        saveLocal();
-        w.TownHub.requestRerender && w.TownHub.requestRerender();
+        saveLocal(); _rerender();
       };
     }
   }
 
-  w.TownHub.registerTab({ id:'explore', title:'探索', render:render, tick:tick });
+w.TownHub.registerTab({ id:'explore', title:'探索', render:render, tick:tick });
 })(window);
+
+
