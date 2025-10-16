@@ -56,7 +56,7 @@
   var SORT_LABEL = { name:'名稱', rate:'機率', qty:'獲得數量', cap:'最大數量' };
 
   // ===== 參數 =====
-  var LS_KEY='EXPLORE_SPLIT_V2_MULTI';
+  var LS_KEY='EXPLORE_SPLIT_V3_MULTI';
   var EXPLORE_TICK_SEC=60;          // 每隊每分鐘檢查一次
   var EXPLORE_CAP_PER_LV=0.10;      // 每級 +10% 每日上限
   var EXPLORE_MAX=20;               // 探索等級上限
@@ -84,7 +84,10 @@
     {name:'元素精華',type:'item',key:'元素精華',cap:3,rate:0.003},
     {name:'衝星石',type:'item',key:'衝星石',cap:20,rate:0.05},
     {name:'星之碎片',type:'item',key:'星之碎片',cap:5,rate:0.003},
-    {name:'怪物獎牌',type:'item',key:'怪物獎牌',cap:50,rate:0.05}
+    {name:'怪物獎牌',type:'item',key:'怪物獎牌',cap:50,rate:0.05},
+    {name:'挑戰券',type:'item',key:'挑戰券',cap:5,rate:0.009},
+    {name:'資源票',type:'item',key:'資源票',cap:5,rate:0.009},
+    {name:'高級探索券',type:'item',key:'高級探索券',cap:5,rate:0.005}
   ];
 
   // ===== 狀態 =====
