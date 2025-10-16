@@ -2,14 +2,14 @@
 // save_core.js — 單槽穩定版（取消 A/B，含自救與舊制轉寫）
 // ==========================
 (() => {
-  const NS = "GAME_SAVE_V16";
+  const NS = "GAME_SAVE_V6";
   const KEY_DATA    = `${NS}:data`;    // 主存檔
   const KEY_META    = `${NS}:meta`;    // 校驗/長度/時間
   const KEY_TMP     = `${NS}:tmp`;     // 寫入時的臨時檔
   const KEY_BACKUP  = `${NS}:backup`;  // 上一次成功保存的備份
 
   // 舊制（自動轉寫 & 讀取用；不再寫入）
-  const OLD_NS = "GAME_SAVE_V2"; // 你的舊 A/B 制
+  const OLD_NS = "GAME_SAVE_V5"; // 你的舊 A/B 制
   const OLD_MANIFEST = `${OLD_NS}:manifest`;
   const OLD_SLOT_A   = `${OLD_NS}:slotA`;
   const OLD_SLOT_B   = `${OLD_NS}:slotB`;
