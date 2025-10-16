@@ -841,7 +841,7 @@ controller(monster, currentHP) {
   def: 110,
   baseExp: 520,
   baseGold: 700,
-  encounterRate: 105,
+  encounterRate: 5,
 
   dropRates: {
     gold:  { min: 260, max: 420 },
@@ -1178,7 +1178,7 @@ hell : [
   def: 160,
   baseExp: 1200,
   baseGold: 980,
-  encounterRate: 105,
+  encounterRate: 5,
 
   dropRates: {
     gold: { min: 480, max: 820 },
