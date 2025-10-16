@@ -1,7 +1,8 @@
 // ==========================================
-// high_explore_main.js — 高級探索 V4 (Auto-Diff)
-// 多槽 / 自動難度 / 戰力門檻 / 免費次數 / 內建獎勵一覽（無倒數文字重繪問題）
-// 依賴：TownHub；可選：HighExploreData、HighExploreDrops、HighExploreEvents
+// high_explore_main.js — 高級探索 V4 (Auto-Diff) — 段位版
+// 多槽 / 自動難度 / 段位門檻 / 免費次數 / 內建獎勵一覽
+// ✨ 加入：掉落表更新提示（偵測 HighExploreData 變更，吐司 + 自動展開獎勵一覽）
+// 依賴：TownHub；可選：HighExploreData、HighExploreDrops、HighExploreEvents、combat_power.js（computeCombatPower + getRankByCP）
 // ==========================================
 (function (w) {
   "use strict";
@@ -21,11 +22,95 @@
   function nznum(x, d){ x=Number(x); return (isFinite(x)? x : (d||0)); }
   function randInt(min, max){ min=Math.floor(min); max=Math.floor(max); return Math.floor(Math.random()*(max-min+1))+min; }
 
+  // ----- 段位工具（F- → SSS+）-----
+  var RANK_ORDER = ["F-","F","F+","E-","E","E+","D-","D","D+","C-","C","C+","B-","B","B+","A-","A","A+","S-","S","S+","SS-","SS","SS+","SSS-","SSS","SSS+"];
+  function rankIndex(label){
+    var i = RANK_ORDER.indexOf(String(label||""));
+    return i < 0 ? 0 : i;
+  }
+  function getPlayerRankLabel(){
+    try{
+      if (typeof w.computeCombatPower === "function" && typeof w.getRankByCP === "function"){
+        var cp = w.computeCombatPower(w.player || {});
+        var rk = w.getRankByCP(cp);
+        return rk && rk.label ? rk.label : "F-";
+      }
+    }catch(_){}
+    return "F-"; // 沒載 combat_power.js 時保底
+  }
+  function meetsRankRequirement(reqRank){
+    // 若新資料：reqRank；若舊資料：reqCP（向下相容）
+    if (reqRank == null) return true;
+    var cur = getPlayerRankLabel();
+    return rankIndex(cur) >= rankIndex(reqRank);
+  }
+
+  // --- 小吐司（可與既有 showToast 共存）---
+  function showToast(msg, isError){
+    var id='toast-mini', el=document.getElementById(id);
+    if(!el){
+      el=document.createElement('div');
+      el.id=id;
+      Object.assign(el.style,{
+        position:'fixed',top:'16px',right:'16px',zIndex:'9999',
+        background:'#10b981',color:'#0b1220',padding:'8px 12px',
+        borderRadius:'10px',boxShadow:'0 8px 24px rgba(0,0,0,.35)',
+        fontWeight:'700',transition:'transform .2s ease, opacity .2s ease',
+        opacity:'0',transform:'translateY(-6px)'
+      });
+      document.body.appendChild(el);
+      requestAnimationFrame(()=>{ el.style.opacity='1'; el.style.transform='translateY(0)'; });
+    }
+    el.textContent=msg;
+    el.style.background=isError?'#ef4444':'#10b981';
+    clearTimeout(el._timer);
+    el._timer=setTimeout(()=>{
+      el.style.opacity='0'; el.style.transform='translateY(-6px)';
+      setTimeout(()=>el.remove(),220);
+    },1600);
+  }
+
+  // --- 掉落表簽章（偵測 HighExploreData 是否變更）---
+  function _fnv1a(str){
+    var h=0x811c9dc5|0;
+    for(var i=0;i<str.length;i++){
+      h^=str.charCodeAt(i);
+      h=(h+((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24)))>>>0;
+    }
+    return (h>>>0).toString(16);
+  }
+  function getData(){ return w.HighExploreData || {}; }
+  function _dropsSignature(){
+    var D=getData();
+    var pack={
+      difficulties:(Array.isArray(D.difficulties)? D.difficulties.map(function(d){return{
+        id:d.id,name:d.name,
+        // 兼容：舊資料用 reqCP，新資料用 reqRank
+        reqCP:+(d.reqCP||0),
+        reqRank:(d.reqRank||null),
+        chanceMult:+(d.chanceMult!=null?d.chanceMult:d.dropMult||1),
+        qtyMult:+(d.qtyMult||1),
+        expMult:+(d.expMult||1)
+      };}):[]),
+      rewards:(Array.isArray(D.rewards)? D.rewards.map(function(r){return{
+        type:r.type,key:r.key,name:r.name,rate:+(r.rate||0),qty:r.qty
+      };}):[]),
+      guaranteed:(Array.isArray(D.guaranteed||D.fixedRewards)? (D.guaranteed||D.fixedRewards).map(function(g){return{
+        type:g.type,key:g.key,name:g.name,baseQty:g.baseQty,qty:g.qty
+      };}):[])
+    };
+    // 排序避免順序差異誤判
+    pack.rewards.sort(function(a,b){return String(a.name||a.key).localeCompare(String(b.name||b.key),'zh-Hant');});
+    pack.guaranteed.sort(function(a,b){return String(a.name||a.key).localeCompare(String(b.name||b.key),'zh-Hant');});
+    return _fnv1a(JSON.stringify(pack));
+  }
+
   // ===== 常數 =====
   var LS_KEY = "HIGH_EXPLORE_V4";
+  var DROPS_SIG_KEY = "HIGH_EXPLORE_DROPS_SIG";
   var SLOT_MAX = 4;
   var SLOT_BASE = 1;
-  var SLOT_UNLOCK_COST = 5000;
+  var SLOT_UNLOCK_COST = 5000; // 💎
   var RUN_SEC = 800;
   var TICKET_NAME = "高級探索券";
 
@@ -35,7 +120,6 @@
   var FREE_REFILL_SEC = 3600; // 每小時 +1
 
   // ===== 讀取難度/獎勵（兼容欄位）=====
-  function getData(){ return w.HighExploreData || {}; }
   function getDiffs(){
     var D = getData();
     return Array.isArray(D.difficulties) ? D.difficulties : [];
@@ -54,31 +138,44 @@
   }
   function getFixedRewards(){
     var D = getData();
-    // 兼容命名：fixedRewards 或 guaranteed
     if (Array.isArray(D.fixedRewards)) return D.fixedRewards;
     if (Array.isArray(D.guaranteed))   return D.guaranteed;
     return [];
   }
-  function getCP(){ try{ return (typeof w.computeCombatPower==="function") ? w.computeCombatPower(w.player):0; }catch(_){return 0;} }
 
-  // ===== 自動選難度（依 reqCP）=====
-  function getAutoDiffIdByCP() {
+  // ===== 自動選難度（優先用 reqRank；無段位 API 時回退 reqCP）=====
+  function canEnterDiff(d){
+    // 若 HighExploreData 已提供 canEnterTier，優先用它
+    try {
+      if (w.HighExploreData && typeof w.HighExploreData.canEnterTier === "function") {
+        return w.HighExploreData.canEnterTier(d.id || "");
+      }
+    } catch(_){}
+    // 自行檢查 reqRank 或 reqCP
+    if (d && d.reqRank != null) {
+      return meetsRankRequirement(d.reqRank);
+    }
+    // 舊版 reqCP 回退
+    var cpReq = nznum(d && d.reqCP, 0);
+    if (cpReq <= 0) return true;
+    var cp = 0;
+    try { cp = (typeof w.computeCombatPower==="function") ? w.computeCombatPower(w.player) : 0; } catch(_){}
+    return cp >= cpReq;
+  }
+  function getAutoDiffIdByRank() {
     var diffs = getDiffs();
-    if (!diffs.length) return "A";
-    var cp = getCP();
-    var best = diffs[0].id || "A";
+    if (!diffs.length) return "R01";
+    var best = diffs[0].id || "R01";
     for (var i=0;i<diffs.length;i++){
-      var d = diffs[i], id = d.id || ("D"+i);
-      if (nznum(d.reqCP,0) <= cp) best = id;
+      var d = diffs[i], id = d.id || ("R"+(i+1));
+      if (canEnterDiff(d)) best = id;
     }
     return best;
   }
   function getNextDiffInfo() {
     var diffs = getDiffs();
-    var cp = getCP();
-    // 找第一個 reqCP > cp 的難度
     for (var i=0;i<diffs.length;i++){
-      if (nznum(diffs[i].reqCP,0) > cp) return diffs[i];
+      if (!canEnterDiff(diffs[i])) return diffs[i];
     }
     return null; // 已達最高
   }
@@ -97,9 +194,10 @@
       o.lastRefillAt = toInt(o.lastRefillAt||nowSec());
 
       // 舊欄位保留（不再使用選單）
-      o.globalDiffId = String(o.globalDiffId || getAutoDiffIdByCP());
+      o.globalDiffId = String(o.globalDiffId || getAutoDiffIdByRank());
 
       o.showRewards = !!o.showRewards;
+      o._dropsSigChecked = !!o._dropsSigChecked;
       return o;
     }catch(_){ return fresh(); }
 
@@ -109,8 +207,9 @@
         log: [],
         freeCharges: FREE_INIT,
         lastRefillAt: nowSec(),
-        globalDiffId: getAutoDiffIdByCP(),
-        showRewards: false
+        globalDiffId: getAutoDiffIdByRank(),
+        showRewards: false,
+        _dropsSigChecked: false
       };
       for (var i=0; i<SLOT_BASE; i++) s.slots.push(newSlot(i));
       return s;
@@ -125,7 +224,7 @@
       startAt: 0,
       duration: RUN_SEC,
       lastResult: null,
-      currentDiffId: null // ★ 每次開始探索時鎖定的難度
+      currentDiffId: null // ★ 每次開始探索時鎖定的段位難度
     };
   }
 
@@ -152,7 +251,7 @@
 
   function saveLocal(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){ } }
 
-  // ===== 免費次數回補（無倒數顯示，純邏輯）=====
+  // ===== 免費次數回補 =====
   function ensureRefill(){
     var now = nowSec();
     if (state.freeCharges >= FREE_MAX) { state.lastRefillAt = now; return; }
@@ -166,15 +265,15 @@
     }
   }
 
-  // ===== 掉落計算：優先用 HighExploreDrops（相容舊），否則用 HighExploreData.getViewForTier，最後再手算 =====
+  // ===== 掉落計算 =====
   function computeDropsForDiff(diffId){
-    // 1) 新掉落引擎
+    // 1) 官方引擎（HighExploreDrops）
     try{
       if (w.HighExploreDrops && typeof w.HighExploreDrops.rollOnceByTier==="function"){
         return w.HighExploreDrops.rollOnceByTier(diffId) || [];
       }
     }catch(_){}
-    // 2) 視圖函式
+    // 2) 視圖函式（HighExploreData）
     try{
       if (w.HighExploreData && typeof w.HighExploreData.getViewForTier==="function"){
         var view = w.HighExploreData.getViewForTier(diffId);
@@ -196,7 +295,7 @@
         return bag;
       }
     }catch(_){}
-    // 3) 最後：用 difficulties 的倍率 + rewards/fixedRewards 自行計算（兼容 chanceMult/dropMult 與 qtyMult）
+    // 3) 備援（兼容舊 dropMult/qtyMult）
     var diff = getDiffById(diffId) || {};
     var chanceMult = nznum(diff.chanceMult!=null? diff.chanceMult : diff.dropMult, 1);
     var qtyMult    = nznum(diff.qtyMult, 1);
@@ -204,7 +303,6 @@
     var bag2 = [], fixed = getFixedRewards(), rewards = getRewards(), i2;
     for (i2=0;i2<fixed.length;i2++){
       var f = fixed[i2];
-      // fixed：支援 baseQty:[min,max] 或 qty:數字
       var fq;
       if (Array.isArray(f.baseQty)) {
         var fmin = Math.max(1, toInt(f.baseQty[0]*qtyMult));
@@ -217,18 +315,18 @@
       if (fq>0) bag2.push({ type:f.type||"item", key:(f.key||f.name||"?"), qty:fq });
     }
     for (i2=0;i2<rewards.length;i2++){
-      var r = rewards[i2];
-      var rate = clamp(nznum(r.rate,0) * chanceMult, 0, 1);
+      var r2 = rewards[i2];
+      var rate = clamp(nznum(r2.rate,0) * chanceMult, 0, 1);
       if (Math.random() < rate){
         var q2 = 1;
-        if (Array.isArray(r.qty)){
-          var min = Math.max(1, toInt(r.qty[0] * qtyMult));
-          var max = Math.max(min, toInt(r.qty[1] * qtyMult));
+        if (Array.isArray(r2.qty)){
+          var min = Math.max(1, toInt(r2.qty[0] * qtyMult));
+          var max = Math.max(min, toInt(r2.qty[1] * qtyMult));
           q2 = randInt(min, max);
-        } else if (r.qty != null){
-          q2 = Math.max(1, toInt(nznum(r.qty,1) * qtyMult));
+        } else if (r2.qty != null){
+          q2 = Math.max(1, toInt(nznum(r2.qty,1) * qtyMult));
         }
-        if (q2>0) bag2.push({ type:r.type||"item", key:(r.key||r.name||"?"), qty:q2 });
+        if (q2>0) bag2.push({ type:r2.type||"item", key:(r2.key||r2.name||"?"), qty:q2 });
       }
     }
     return bag2;
@@ -243,13 +341,12 @@
     }catch(_){}
   }
 
-  // ===== 可否開始：用「目前 CP 對應的自動難度」判定 =====
+  // ===== 可否開始：用「目前段位對應的自動難度」判定 =====
   function canStartAny(){
-    var autoId = getAutoDiffIdByCP();
+    var autoId = getAutoDiffIdByRank();
     var diff = getDiffById(autoId);
-    var reqCP = diff ? (diff.reqCP||0) : 0;
-    var cp = getCP();
-    if (cp < reqCP) return false;
+    var ok = diff ? canEnterDiff(diff) : true;
+    if (!ok) return false;
     return (state.freeCharges > 0 || getItemQuantity(TICKET_NAME) > 0);
   }
 
@@ -270,8 +367,8 @@
       removeItem(TICKET_NAME, 1);
     }
 
-    // ★ 鎖定當前自動難度（這一趟固定用它）
-    slot.currentDiffId = getAutoDiffIdByCP();
+    // ★ 鎖定當前自動段位難度（這一趟固定用它）
+    slot.currentDiffId = getAutoDiffIdByRank();
 
     slot.running = true;
     slot.startAt = nowSec();
@@ -282,7 +379,7 @@
 
   function finishRun(slot){
     var drops = [];
-    var diffId = slot.currentDiffId || getAutoDiffIdByCP();
+    var diffId = slot.currentDiffId || getAutoDiffIdByRank();
 
     try {
       drops = computeDropsForDiff(diffId) || [];
@@ -290,26 +387,24 @@
       console.error("[HighExplore] drop error:", e);
     }
 
-  // 發獎
-for (var k=0;k<drops.length;k++){
-  var d = drops[k], q = Math.max(1, (d.qty|0)), key = d.key;
-  if (d.type === "gem" && w.player) {
-    w.player.gem  = (w.player.gem  || 0) + q;
-  } else if (d.type === "gold" && w.player) {
-    w.player.gold = (w.player.gold || 0) + q;
-  } else if (d.type === "stone" && w.player) {
-    w.player.stone = (w.player.stone || 0) + q;
-  } else if (d.type === "exp" && w.player) {          // ★ 新增：EXP 直接吃進經驗
-    if (typeof w.addExp === "function") w.addExp(q);
-    else if (typeof w.gainExp === "function") w.gainExp(q);
-    else if (player.exp != null) player.exp = (player.exp || 0) + q;
-  } else {
-    addItem(key, q); // 其他進背包
-  }
-}
-  
-  
-  
+    // 發獎
+    for (var k=0;k<drops.length;k++){
+      var d = drops[k], q = Math.max(1, (d.qty|0)), key = d.key;
+      if (d.type === "gem" && w.player) {
+        w.player.gem  = (w.player.gem  || 0) + q;
+      } else if (d.type === "gold" && w.player) {
+        w.player.gold = (w.player.gold || 0) + q;
+      } else if (d.type === "stone" && w.player) {
+        w.player.stone = (w.player.stone || 0) + q;
+      } else if (d.type === "exp" && w.player) {          // EXP 直接吃進經驗
+        if (typeof w.addExp === "function") w.addExp(q);
+        else if (typeof w.gainExp === "function") w.gainExp(q);
+        else if (player.exp != null) player.exp = (player.exp || 0) + q;
+      } else {
+        addItem(key, q); // 其他進背包
+      }
+    }
+
     upd(); saveGame();
 
     // 紀錄
@@ -376,8 +471,7 @@ for (var k=0;k<drops.length;k++){
   }
 
   function renderRewardsTable(){
-    // 以「目前 CP 對應的自動難度」顯示倍率後的數據
-    var autoId = getAutoDiffIdByCP();
+    var autoId = getAutoDiffIdByRank();
     var diff = getDiffById(autoId) || {};
     var dropMult = nznum((diff.dropMult!=null? diff.dropMult : diff.chanceMult), 1);
     var qtyMult  = nznum(diff.qtyMult, 1);
@@ -440,7 +534,7 @@ for (var k=0;k<drops.length;k++){
             '<th style="text-align:left;padding:8px 10px;border-bottom:1px solid #1f2937;">類型</th>'+
             '<th style="text-align:right;padding:8px 10px;border-bottom:1px solid #1f2937;">數量（含倍率）</th>'+
             '<th style="text-align:right;padding:8px 10px;border-bottom:1px solid #1f2937;">加成後機率</th>'+
-          '</tr>'+
+          
        ' </thead>'+
         '<tbody>'+rows+'</tbody>'+
       '</table>'+
@@ -467,18 +561,27 @@ for (var k=0;k<drops.length;k++){
       ? ('<div class="mini" style="opacity:.85">倒數：<b>'+remS+'s</b>（免費次數：'+state.freeCharges+'｜'+TICKET_NAME+'：'+ticket+'）</div>'+bar(pct))
       : ('<div class="mini" style="opacity:.85">狀態：<b>閒置</b>（免費次數：'+state.freeCharges+'｜'+TICKET_NAME+'：'+ticket+'）</div>');
 
-    var diff = getDiffById(getAutoDiffIdByCP());
-    var reqCP = diff? (diff.reqCP||0) : 0;
-    var cp    = getCP();
-    var meet  = (cp >= reqCP);
+    // 頂部顯示：需求段位 或（回退）需求CP
+    var autoId = getAutoDiffIdByRank();
+    var diff = getDiffById(autoId);
+    var meetRank = diff ? canEnterDiff(diff) : true;
+
+    var reqInfo = '';
+    if (diff && diff.reqRank){
+      reqInfo = '需求段位：<b style="color:'+(meetRank?'#34d399':'#fca5a5')+'">'+diff.reqRank+'</b>';
+    } else {
+      var reqCP = diff ? (diff.reqCP||0) : 0;
+      var cp = 0; try{ cp = (typeof w.computeCombatPower==="function") ? w.computeCombatPower(w.player):0; }catch(_){}
+      reqInfo = '需求CP：<b style="color:'+(cp>=reqCP?'#34d399':'#fca5a5')+'">'+fmt(reqCP)+'</b>｜你的戰力：<b>'+fmt(cp)+'</b>';
+    }
 
     var controlHtml =
       '<div style="display:flex;gap:8px;align-items:center;margin-top:8px">'+
         '<button data-sid="'+slot.id+'" class="btn-start" '+
-          'style="background:'+(meet?'#10b981':'#6b7280')+';border:none;color:#0b1220;border-radius:8px;padding:6px 10px;cursor:'+(canStartNow?'pointer':'not-allowed')+'" '+
+          'style="background:'+(meetRank?'#10b981':'#6b7280')+';border:none;color:#0b1220;border-radius:8px;padding:6px 10px;cursor:'+(canStartNow?'pointer':'not-allowed')+'" '+
           (canStartNow?'':'disabled')+'>開始探索（優先消耗免費次數）</button>'+
       '</div>'+
-      '<div style="font-size:12px;opacity:.75;margin-top:4px">需求CP：<b style="color:'+(meet?'#34d399':'#fca5a5')+'">'+fmt(reqCP)+'</b>｜你的戰力：<b>'+fmt(cp)+'</b></div>';
+      '<div style="font-size:12px;opacity:.75;margin-top:4px">'+reqInfo+'</div>';
 
     return card('⚔️ 探索槽 #'+(slot.id+1)+(slot.enabled?'':'（停用）'),
       runningHtml + controlHtml + lastHtml
@@ -488,16 +591,40 @@ for (var k=0;k<drops.length;k++){
   function render(container){
     ensureRefill();
 
+    // —— 掉落表變更偵測：只在本次載入後第一次進分頁時檢查 ——
+    if (!state._dropsSigChecked) {
+      var curSig = _dropsSignature();
+      var prevSig = "";
+      try { prevSig = localStorage.getItem(DROPS_SIG_KEY) || ""; } catch(_) {}
+      if (curSig && curSig !== prevSig) {
+        try { localStorage.setItem(DROPS_SIG_KEY, curSig); } catch(_) {}
+        state.showRewards = true; // 自動展開
+        saveLocal();
+        showToast("🧩 掉落表已更新並套用");
+      }
+      state._dropsSigChecked = true;
+    }
 
-    // 頂部：顯示目前自動難度 + 下一檔門檻 + 免費規則（無倒數）
-    var autoId = getAutoDiffIdByCP();
+    // 頂部：顯示目前自動難度 + 下一檔段位門檻 + 免費規則
+    var autoId = getAutoDiffIdByRank();
     var curDiff = getDiffById(autoId);
     var nextDiff = getNextDiffInfo();
 
+    var nextInfo = '';
+    if (nextDiff){
+      if (nextDiff.reqRank){
+        nextInfo = '下一檔：'+nextDiff.name+'｜需求段位：<b>'+nextDiff.reqRank+'</b>';
+      }else{
+        nextInfo = '下一檔：'+nextDiff.name+'｜需求CP：<b>'+fmt(nextDiff.reqCP||0)+'</b>';
+      }
+    }else{
+      nextInfo = '已達最高難度';
+    }
+
     var headerHtml =
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
-        '<div>難度：<b>'+ (curDiff?curDiff.name:autoId) +'</b>（依戰力自動調整）</div>'+
-        (nextDiff ? '<div style="opacity:.8;font-size:12px">下一檔：'+nextDiff.name+'｜需求CP：<b>'+fmt(nextDiff.reqCP||0)+'</b></div>' : '<div style="opacity:.8;font-size:12px">已達最高難度</div>')+
+        '<div>難度：<b>'+ (curDiff?curDiff.name:autoId) +'</b>（依段位自動調整）</div>'+
+        '<div style="opacity:.8;font-size:12px">'+nextInfo+'</div>'+
         '<button id="hexpToggleRewards" style="background:#4f46e5;border:none;color:#fff;border-radius:8px;padding:6px 10px;cursor:pointer">'+
           (state.showRewards?'隱藏獎勵一覽':'顯示獎勵一覽')+
         '</button>'+

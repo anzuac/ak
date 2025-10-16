@@ -89,7 +89,12 @@
     {name:'怪物獎牌',type:'item',key:'怪物獎牌',cap:50,rate:0.05},
     {name:'挑戰券',type:'item',key:'挑戰券',cap:3,rate:0.009},
     {name:'資源票',type:'item',key:'挑戰票',cap:3,rate:0.009},
-    {name:'高級探索券',type:'item',key:'高級探索券',cap:3,rate:0.009}
+    
+    {name:'高級探索券',type:'item',key:'高級探索券',cap:3,rate:0.009},
+     {name:'生命藥水',type:'item',key:'生命藥水',cap:20,rate:0.019},
+      {name:'法力藥水',type:'item',key:'法力藥水',cap:20,rate:0.019},
+     {name:'高級生命藥水',type:'item',key:'高級生命藥水',cap:10,rate:0.01},
+      {name:'高級法力藥水',type:'item',key:'高級法力藥水',cap:10,rate:0.01}
   ];
 
   // ===== 狀態（獨立存檔 + 簡易遷移） =====

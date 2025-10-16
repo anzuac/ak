@@ -1,11 +1,12 @@
 // =======================================================
-// equip_life_set.js — 生命套裝（項鍊／戒指／耳環）ES5
+// equip_life_set.js — 生命套裝（項鍊／戒指／耳環）ES5（固定機率版）
 // - 獨立存檔：localStorage life_accessory_set_v1
 // - 讀背包 inventory.js：getItemQuantity / removeItem
 // - 掛載到 equipment_hub.js：EquipHub.registerTab
 // - 回復力加成 = 強化(每等+2%) + 突破(每階+5%) + 套裝效果(全三件達破4：HP+5000 / MP+300 / 回復+50%)
-// - 解放：須先達成套裝效果後開啟；每次成功+5等強化上限；最多3次；成功率10%（失敗每次+2%）
-// - 成本：突破/解放 隨強化等級分段遞增（A版曲線）
+// - 解放：須先達成套裝效果後開啟；每次成功+5等強化上限；最多3次
+// - 成本：強化/突破/解放 隨等級/階段/解放次數遞增（新版曲線已實作）
+// - ✅ 強化/解放成功率固定，不隨失敗提高（無保底/無失敗累加）
 // =======================================================
 (function () {
   if (window.LifeSetTab) return;
@@ -19,15 +20,16 @@
   var LIBERATION_CAP_INC = 5;    // 每次解放 +5
   var LIBERATION_MAX_TIMES = 3;  // 最多 3 次
 
-  var ENH_BASE_CHANCE = 0.20;    // 強化基礎成功率 20%
-  var ENH_FAIL_STEP   = 0.05;    // 強化失敗每次 +5%
-  var ENH_PITY_CAP    = 0.50;    // 強化保底 50% 上限
+  // ✅ 成功率固定（不再因失敗累加）
+  var ENH_BASE_CHANCE = 0.20;    // 強化基礎成功率 20%（固定）
+  var ENH_FAIL_STEP   = 0.00;    // 失敗不再提高機率（保留欄位但不生效）
+  var ENH_PITY_CAP    = 1.00;    // 無意義（固定機率），保留避免舊檔報錯
 
-  var BT_BASE_CHANCE  = 0.10;    // 突破成功率 10%（不保底）
-  var BT_COST         = 20;      // 基礎：20 顆（實際用動態成本函式計算）
+  var BT_BASE_CHANCE  = 0.10;    // 突破成功率 10%（固定，不保底）
+  var BT_COST         = 20;      // 舊常數，僅作參考，實際成本走函式
 
-  var LIB_BASE_CHANCE = 0.10;    // 解放基礎成功率 10%
-  var LIB_FAIL_STEP   = 0.00;    // 解放失敗每次 +2%
+  var LIB_BASE_CHANCE = 0.10;    // 解放基礎成功率 10%（固定）
+  var LIB_FAIL_STEP   = 0.00;    // 失敗不再提高機率
 
   var ENH_LV_INC_REC  = 0.02;    // 每等 +2% 回復力
   var BT_STAGE_INC_REC= 0.05;    // 每階 +5% 回復力
@@ -38,7 +40,7 @@
   var SET_REC  = 0.50;           // 回復 +50%
 
   // 名稱冠名（突破 0~4）
-  var PREFIX = ["生命", "守護", "生命", "祝福", "生命女神祝福"];
+  var PREFIX = ["生命", "守護", "命運", "祝福", "生命女神祝福"];
 
   // ====== 存檔結構 ======
   var STATE = load() || {
@@ -66,7 +68,7 @@
   function consumeItem(name, n){
     if (typeof removeItem === 'function') removeItem(name, n);
     else if (window.inventory){ window.inventory[name] = Math.max((window.inventory[name]||0)-n,0); }
-    saveGame?.();
+    try { saveGame && saveGame(); } catch(_){}
   }
 
   // 顯示名
@@ -83,31 +85,42 @@
     return base + plus;
   }
 
-  // 強化成功率（含保底）
+  // ✅ 強化成功率（固定）
   function enhanceChance(part){
-    return Math.min(ENH_BASE_CHANCE + (part.enhFail||0)*ENH_FAIL_STEP, ENH_PITY_CAP);
+    return ENH_BASE_CHANCE;
   }
 
-  // 解放成功率（有保底累進）
+  // ✅ 解放成功率（固定）
   function liberationChance(part){
-    return clamp(LIB_BASE_CHANCE + (part.libFail||0)*LIB_FAIL_STEP, 0, 1);
+    return clamp(LIB_BASE_CHANCE, 0, 1);
   }
 
-  // 強化消耗：需求「飾品強化石」5 顆，等級越高數量越多（採線性：5 + 5*當前等級）
+  // ✅ 強化消耗（新規）：隨 等級/突破階/解放次數 遞增
+  //    cost = 8 + 4*level + 6*stage + 10*lib
   function enhanceCostStones(part){
-    return 5 + (part.level|0) * 5;
+    var lv = part.level|0, st = part.stage|0, lb = part.lib|0;
+    return Math.max(1, 8 + 4*lv + 6*st + 10*lb);
   }
 
-  // ★ 突破/解放消耗：分段遞增（A 版曲線）
-  // ★ 突破/解放消耗：等級越高當次成本越高（20,40,60,80,100...）
-function breakthroughCost(part){
-  var lv = part.level|0;          // 強化等級
-  return 50          // Lv0→20, Lv1→40, Lv2→60, ...
-}
-function liberationCost(part){
-  var lv = part.level|0;          // 強化等級
-  return 350        // Lv0→30, Lv1→60, Lv2→90, ...
-}
+  // ✅ 突破/解放成本：實作版
+  // 突破（生命突破石）：
+  //   base = 20*(lv+1)         // Lv0→20, Lv1→40, Lv2→60 ...
+  //   weight = 1 + 0.25*stage  // 每階 +25% 成本
+  function breakthroughCost(part){
+    var lv = part.level|0, st = part.stage|0;
+    var base = 20 * (lv + 1);
+    var weight = 1 + 0.25 * st;
+    return Math.max(1, Math.floor(base * weight));
+  }
+  // 解放（生命突破石）：
+  //   base = 30*(lv+1)         // Lv0→30, Lv1→60, Lv2→90 ...
+  //   weight = 1 + 0.50*lib    // 每次已解放 +50% 成本
+  function liberationCost(part){
+    var lv = part.level|0, lb = part.lib|0;
+    var base = 30 * (lv + 1);
+    var weight = 1 + 0.50 * lb;
+    return Math.max(1, Math.floor(base * weight));
+  }
 
   // 整體回復力加成（小數）
   function partRecoverBonus(part){
@@ -123,6 +136,7 @@ function liberationCost(part){
   // 套裝效果 → 寫入 coreBonus
   function applyCoreBonus(){
     if (!window.player || !player.coreBonus) return;
+    player.coreBonus.bonusData = player.coreBonus.bonusData || {};
     var slot = player.coreBonus.bonusData.lifeSet = player.coreBonus.bonusData.lifeSet || {};
 
     // 清空再寫（避免殘留）
@@ -143,8 +157,7 @@ function liberationCost(part){
 
     slot.recoverPercent = rec;
 
-    // 要讓 UI/戰鬥即時感知
-    updateResourceUI?.();
+    try { updateResourceUI && updateResourceUI(); } catch(_){}
   }
 
   // ====== 動作 ======
@@ -159,17 +172,17 @@ function liberationCost(part){
     // 消耗
     consumeItem(ENHANCE_ITEM, need);
 
-    // 判定
+    // 判定（固定機率）
     var chance = enhanceChance(part);
     var roll = rand01();
     if (roll <= chance){
       part.level += 1;
-      part.enhFail = 0; // 成功歸零保底
-      save(); applyCoreBonus(); EquipHub?.requestRerender();
+      // 固定機率：不使用 part.enhFail
+      save(); applyCoreBonus(); try { EquipHub && EquipHub.requestRerender(); } catch(_){}
       return { ok:true, level:part.level, chance:chance };
     } else {
-      part.enhFail = (part.enhFail||0) + 1;
-      save(); EquipHub?.requestRerender();
+      // 固定機率：失敗不累加 enhFail
+      save(); try { EquipHub && EquipHub.requestRerender(); } catch(_){}
       return { ok:false, reason:'fail', chance:chance, nextChance: enhanceChance(part) };
     }
   }
@@ -186,10 +199,11 @@ function liberationCost(part){
     var roll = rand01();
     if (roll <= BT_BASE_CHANCE){
       part.stage += 1; // +1 階
-      save(); applyCoreBonus(); EquipHub?.requestRerender();
+      save(); applyCoreBonus(); try { EquipHub && EquipHub.requestRerender(); } catch(_){}
       return { ok:true, stage:part.stage };
     } else {
-      save(); EquipHub?.requestRerender();
+      // 不保底：不累加任何保底變數
+      save(); try { EquipHub && EquipHub.requestRerender(); } catch(_){}
       return { ok:false, reason:'fail' };
     }
   }
@@ -204,16 +218,16 @@ function liberationCost(part){
 
     consumeItem(BREAK_ITEM, needLib);
 
-    var chance = liberationChance(part);
+    var chance = liberationChance(part); // 固定
     var roll = rand01();
     if (roll <= chance){
       part.lib += 1;        // 解放+1 → 強化上限 +5
-      part.libFail = 0;     // 歸零
-      save(); applyCoreBonus(); EquipHub?.requestRerender();
+      // 固定機率：不累加 libFail
+      save(); applyCoreBonus(); try { EquipHub && EquipHub.requestRerender(); } catch(_){}
       return { ok:true, lib:part.lib, newMax: maxEnhanceOf(part) };
     } else {
-      part.libFail = (part.libFail||0) + 1;
-      save(); EquipHub?.requestRerender();
+      // 固定機率：失敗不累加 libFail
+      save(); try { EquipHub && EquipHub.requestRerender(); } catch(_){}
       return { ok:false, reason:'fail', nextChance: liberationChance(part) };
     }
   }
@@ -237,7 +251,6 @@ function liberationCost(part){
       var haveEnh = getItemQuantity?getItemQuantity(ENHANCE_ITEM):0;
       var haveBrk = getItemQuantity?getItemQuantity(BREAK_ITEM):0;
 
-      // 動態成本（顯示用）
       var costBreak = breakthroughCost(p);
       var costLib   = liberationCost(p);
 
@@ -257,7 +270,7 @@ function liberationCost(part){
               '<div style="font-weight:700;margin-bottom:6px">強化</div>'+
               '<div>等級：<b>'+p.level+'</b> / '+maxLv+'（每等 +2% 回復力）</div>'+
               '<div>消耗：<b>'+ENHANCE_ITEM+' × '+costEnh+'</b>（持有 '+fmt(haveEnh)+'）</div>'+
-              '<div>成功率：<b>'+enhChance+'%</b>（失敗每次 +5%，保底上限 50%）</div>'+
+              '<div>成功率：<b>'+enhChance+'%</b></div>'+
               '<div style="margin-top:8px"><button id="btn-enh-'+key+'" style="background:#10b981;border:0;color:#0b1220;border-radius:8px;padding:6px 10px;cursor:pointer">強化</button></div>'+
             '</div>'+
 
@@ -266,7 +279,7 @@ function liberationCost(part){
               '<div style="font-weight:700;margin-bottom:6px">突破</div>'+
               '<div>階段：<b>'+p.stage+'</b> / 4（每階 +5% 回復力，並更名）</div>'+
               '<div>消耗：<b>'+BREAK_ITEM+' × '+fmt(costBreak)+'</b>（持有 '+fmt(haveBrk)+'）</div>'+
-              '<div>成功率：<b>'+Math.round(BT_BASE_CHANCE*100)+'%</b>（不保底）</div>'+
+              '<div>成功率：<b>'+Math.round(BT_BASE_CHANCE*100)+'%</b></div>'+
               '<div style="margin-top:8px"><button id="btn-bt-'+key+'" style="background:#3b82f6;border:0;color:#fff;border-radius:8px;padding:6px 10px;cursor:pointer">突破</button></div>'+
             '</div>'+
           '</div>'+
@@ -279,7 +292,7 @@ function liberationCost(part){
             '</div>'+
             '<div>解放次數：<b>'+p.lib+'</b> / '+LIBERATION_MAX_TIMES+'（每次 +5 強化上限）</div>'+
             '<div>消耗：<b>'+BREAK_ITEM+' × '+fmt(costLib)+'</b>（持有 '+fmt(haveBrk)+'）</div>'+
-            '<div>成功率：<b>'+libChance+'%</b>（）</div>'+
+            '<div>成功率：<b>'+libChance+'%</b></div>'+
             '<div style="margin-top:8px"><button id="btn-lib-'+key+'" '+(unlocked?'':'disabled style="opacity:.5;cursor:not-allowed"')+' class="btn-lib" style="background:#f59e0b;border:0;color:#111827;border-radius:8px;padding:6px 10px;cursor:pointer">解放</button></div>'+
           '</div>'+
         '</div>';
@@ -311,16 +324,19 @@ function liberationCost(part){
     // 綁事件
     function bind(id, fn){
       var el = container.querySelector('#'+id);
-      if (el) el.onclick = function(){ var r = fn(); if (!r || !r.ok){
+      if (el) el.onclick = function(){
+        var r = fn();
+        if (!r || !r.ok){
           if (r && r.reason==='no_stone') alert('強化失敗：'+ENHANCE_ITEM+' 不足（需要 '+r.need+'）');
           else if (r && r.reason==='no_break') alert('操作失敗：'+BREAK_ITEM+' 不足（需要 '+r.need+'）');
           else if (r && r.reason==='max_level') alert('已達強化上限');
           else if (r && r.reason==='max_stage') alert('已達最大突破階段');
           else if (r && r.reason==='set_locked') alert('尚未解鎖：需全套突破 4');
           else if (r && r.reason==='max_lib') alert('已達最大解放次數');
-          else if (r && r.reason==='fail') alert('失敗（下次成功率提升）');
+          else if (r && r.reason==='fail') alert('失敗（固定機率 '+Math.round((r.nextChance||0)*100)+'%）');
           else alert('操作失敗');
-        }};
+        }
+      };
     }
     bind('btn-enh-necklace', function(){ return enhance('necklace'); });
     bind('btn-enh-ring',     function(){ return enhance('ring'); });
