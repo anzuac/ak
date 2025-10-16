@@ -1,42 +1,60 @@
-// quest_achievements_es5.js — 成就系統（進度條＋美化 ES5 完整版）
-//
-// 規則：
-// - 等級：每 10 等為一階；每階獎勵 = 5 × 階數（第 1 階給 5 張、第 2 階給 10 張...累進制）
-// - 主屬性（STR/AGI/INT/LUK）：100,200,...,1000；>1000 後每 1000 為一階；每階 +5 張
-// - 攻擊力/防禦力：只讀「裝備貢獻（含四圍轉攻防）」的 ATK/DEF，不含技能乘算；門檻同主屬性；每階 +5 張
-// - 技能傷害、攻擊速度（增益量）：每 +20% 一階；每階 +5 張
-// - 經驗值、掉寶率、金幣掉落率：每 +30% 一階；每階 +5 張
-// - 擊殺：每 1000 隻一階；每階 +5 張
-// - 精英擊殺：每 100 隻一階；每階 +10 張
-// - Boss 擊殺：每 10 隻一階；每階 +20 張
-// - 累積傷害：每 5,000,000 一階；每階 +20 張
-//
-// 對外 API：
-//   Achievements.onKill(n), Achievements.onEliteKill(n), Achievements.onBossKill(n), Achievements.onDamageDealt(amount)
-//   Achievements.checkAll()  → 重算並發獎（建議在能力更新/換裝/配點後呼叫）
-//   與 QuestCore 整合：切到「成就任務」分頁時自動渲染
-//
-// 儲存：localStorage("ACHIEVEMENTS_V1")
-// ------------------------------------------------------------------------------
+// quest_achievements_es5.js — 成就系統（進度條＋美化 ES5 完整版；主屬性/攻防採幾何門檻）
+// 變更點（本版更新重點）：
+// 1) 主屬性（STR/AGI/INT/LUK）與 攻擊力/防禦力 的階段門檻改為「幾何成長」：每完成一階，下一階門檻 ×1.25
+//    - 主屬性起始門檻：100
+//    - 攻擊/防禦起始門檻：100（讀裝備貢獻）
+//    - 成長倍率：1.25（與擊殺/累傷一致）
+// 2) 主屬性與攻防的每階獎勵改為固定 +5 張（其他類別原規則不動）
+// 3) UI 進度條同步改用幾何門檻顯示
 
 (function(){
   var STORAGE_KEY = "ACHIEVEMENTS_V1";
 
   var REWARD_ITEM = "sp點數券";
-  var REWARD_PER_STAGE_DEFAULT = 2;
-  var REWARD_PER_STAGE_DAMAGE  = 20;
+
+  // —— 獎勵常數 —— //
+  var REWARD_PER_STAGE_PRIMARY = 5;  // 主屬性（每階 +5 張）
+  var REWARD_PER_STAGE_AD      = 5;  // 攻擊/防禦（每階 +5 張）
+
+  // 其他類別維持原設定
+  var REWARD_PER_STAGE_DEFAULT = 2;  // 探索三率 / 擊殺（若你要依規格調整可另行提高）
+  var REWARD_PER_STAGE_COMBAT  = 5;  // 技能傷害 / 攻速 / 總傷害
+  var REWARD_PER_STAGE_DAMAGE  = 20; // 累積傷害
   var REWARD_PER_STAGE_ELITE   = 10;
   var REWARD_PER_STAGE_BOSS    = 20;
 
-  var LV_UNIT     = 10;        // 每 10 等一階
+  // —— 門檻常數 —— //
+  var LV_UNIT     = 10;        // 等級：每 10 等一階
+  // 幾何（擊殺系）維持原來的：
   var KILL_UNIT   = 1000;
   var ELITE_UNIT  = 100;
   var BOSS_UNIT   = 10;
   var DAMAGE_UNIT = 5000000;
+  var GEO_GROWTH  = 1.25;      // +25%
+
+  // — 新：主屬性/攻防 也改幾何門檻 — //
+  var PRIMARY_UNIT = 100;      // 第 1 階 100，之後 ×1.25 成長
+  var AD_UNIT      = 100;      // ATK/DEF 第 1 階 100，之後 ×1.25 成長
+  var ATTR_GROWTH  = 1.25;     // 與 GEO_GROWTH 一致，便於維護
 
   // 數學工具
   function floor(n){ return Math.floor(Number(n)||0); }
   function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+  // 幾何門檻：
+  //  - 第 s 階（從 0 起算）的單階門檻 = unit * (G^s)
+  //  - s 階累積門檻（達成 s 階所需的總量）= unit * (G^s - 1)/(G - 1)
+  //  - 已完成階數 = 最大 s 使得累積 <= total
+  function geoStage(total, unit, G){
+    total = Number(total)||0; if (total <= 0) return 0;
+    var x = (total * (G - 1) / unit) + 1;
+    if (x <= 1) return 0;
+    return Math.max(0, floor(Math.log(x) / Math.log(G))); // s
+  }
+  function geoCumForStage(s, unit, G){
+    if (s <= 0) return 0;
+    return unit * (Math.pow(G, s) - 1) / (G - 1);
+  }
 
   function loadState(){
     try{
@@ -46,7 +64,7 @@
           level:0,
           str:0, agi:0, int:0, luk:0,
           atk:0, def:0,
-          skill:0, aspd:0,
+          skill:0, aspd:0, totalDmgBonus:0,
           exp:0, drop:0, gold:0,
           kill:0, elite:0, boss:0, dmg:0
         },
@@ -61,7 +79,9 @@
       if (s.level==null) s.level=0;
       if (s.str==null){ s.str=0; s.agi=0; s.int=0; s.luk=0; }
       if (s.atk==null){ s.atk=0; s.def=0; }
-      if (s.skill==null){ s.skill=0; s.aspd=0; }
+      if (s.skill==null){ s.skill=0; }
+      if (s.aspd==null) s.aspd=0;
+      if (s.totalDmgBonus==null) s.totalDmgBonus=0; // 新增「總傷害 加成」階數
       if (s.exp==null){ s.exp=0; s.drop=0; s.gold=0; }
       if (s.kill==null) s.kill=0;
       if (s.elite==null) s.elite=0;
@@ -80,7 +100,7 @@
           level:0,
           str:0, agi:0, int:0, luk:0,
           atk:0, def:0,
-          skill:0, aspd:0,
+          skill:0, aspd:0, totalDmgBonus:0,
           exp:0, drop:0, gold:0,
           kill:0, elite:0, boss:0, dmg:0
         },
@@ -119,26 +139,26 @@
     box.innerHTML = '<span style="color:#ffe28a;font-weight:700;">'+ text +'</span>';
     box.style.opacity='1';
     clearTimeout(box._timer);
-    box._timer = setTimeout(function(){
-      box.style.opacity='0';
-    }, 2200);
+    box._timer = setTimeout(function(){ box.style.opacity='0'; }, 2200);
   }
 
   // —— 階段計算 —— //
-  function primaryStage(val){
-    val = floor(val);
-    if (val <= 0) return 0;
-    if (val <= 1000) return floor(val/100); // 1..10
-    return 10 + floor((val - 1000)/1000);
-  }
-  function adStage(val){ return primaryStage(val); }
+  // 等級維持原有 10 等一階
+  function levelStage(lv){ return floor((lv||0)/LV_UNIT); }
+
+  // ——— 新：主屬性/攻防改幾何門檻 ———
+  function primaryStage(val){ return geoStage(val, PRIMARY_UNIT, ATTR_GROWTH); }
+  function adStage(val){ return geoStage(val, AD_UNIT, ATTR_GROWTH); }
+
+  // 20% / 30% 類
   function per20Stage(val){ return floor((Number(val)||0) / 0.20); }
   function per30Stage(val){ return floor((Number(val)||0) / 0.30); }
-  function killStage(c){ return floor((c||0)/KILL_UNIT); }
-  function eliteStage(c){ return floor((c||0)/ELITE_UNIT); }
-  function bossStage(c){ return floor((c||0)/BOSS_UNIT); }
-  function dmgStage(d){ return floor((d||0)/DAMAGE_UNIT); }
-  function levelStage(lv){ return floor((lv||0)/LV_UNIT); }
+
+  // 擊殺系（幾何）
+  function killStage(c){ return geoStage(c, KILL_UNIT, GEO_GROWTH); }
+  function eliteStage(c){ return geoStage(c, ELITE_UNIT, GEO_GROWTH); }
+  function bossStage(c){ return geoStage(c, BOSS_UNIT, GEO_GROWTH); }
+  function dmgStage(d){ return geoStage(d, DAMAGE_UNIT, GEO_GROWTH); }
 
   // —— 讀玩家（只讀：基礎 + core；攻防不吃技能乘算）—— //
   function readSnapshot(){
@@ -169,6 +189,13 @@
     // 攻速增益（(base+core)-1）→ 顯示加成量
     var aspdGain = Math.max(0, (Number(p.attackSpeedPctBase||1) + Number(core.attackSpeedPct||0)) - 1);
 
+    // 「總傷害 加成」：允許多個命名以相容既有程式（任一存在即可）
+    var totalDmgBonus = 0
+      + Number(p.baseFinalDamage||0)
+      + Number(core.finalDamage||0)
+      + Number(core.damageBonus||0)
+      + Number(p.totalDamageBonus||0); // 預留別名
+
     // 三率（僅 core）
     var exp = Number(core.expBonus||0);
     var drop = Number(core.dropBonus||0);
@@ -181,6 +208,7 @@
       defEquip: finalDef,
       skill: skillDmg,
       aspdGain: aspdGain,
+      totalDmgBonus: totalDmgBonus,
       exp: exp,
       drop: drop,
       gold: gold,
@@ -213,36 +241,38 @@
     var snap = readSnapshot();
     var awardSum = 0;
 
-    // 等級
+    // 等級（遞增制）
     var stLv = levelStage(snap.level);
     if (stLv > state.stages.level){
       awardSum += giveRewardLevel(state.stages.level, stLv);
       state.stages.level = stLv;
     }
 
-    // 主屬性
+    // 主屬性（幾何門檻；每階 +5 張）
     var sStr = primaryStage(snap.prim.str);
     var sAgi = primaryStage(snap.prim.agi);
     var sInt = primaryStage(snap.prim.int);
     var sLuk = primaryStage(snap.prim.luk);
-    if (sStr > state.stages.str){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sStr - state.stages.str); state.stages.str = sStr; }
-    if (sAgi > state.stages.agi){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sAgi - state.stages.agi); state.stages.agi = sAgi; }
-    if (sInt > state.stages.int){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sInt - state.stages.int); state.stages.int = sInt; }
-    if (sLuk > state.stages.luk){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sLuk - state.stages.luk); state.stages.luk = sLuk; }
+    if (sStr > state.stages.str){ awardSum += giveRewardFixed(REWARD_PER_STAGE_PRIMARY, sStr - state.stages.str); state.stages.str = sStr; }
+    if (sAgi > state.stages.agi){ awardSum += giveRewardFixed(REWARD_PER_STAGE_PRIMARY, sAgi - state.stages.agi); state.stages.agi = sAgi; }
+    if (sInt > state.stages.int){ awardSum += giveRewardFixed(REWARD_PER_STAGE_PRIMARY, sInt - state.stages.int); state.stages.int = sInt; }
+    if (sLuk > state.stages.luk){ awardSum += giveRewardFixed(REWARD_PER_STAGE_PRIMARY, sLuk - state.stages.luk); state.stages.luk = sLuk; }
 
-    // 攻防（裝備）
+    // 攻防（幾何門檻；每階 +5 張）
     var sAtk = adStage(snap.atkEquip);
     var sDef = adStage(snap.defEquip);
-    if (sAtk > state.stages.atk){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sAtk - state.stages.atk); state.stages.atk = sAtk; }
-    if (sDef > state.stages.def){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sDef - state.stages.def); state.stages.def = sDef; }
+    if (sAtk > state.stages.atk){ awardSum += giveRewardFixed(REWARD_PER_STAGE_AD, sAtk - state.stages.atk); state.stages.atk = sAtk; }
+    if (sDef > state.stages.def){ awardSum += giveRewardFixed(REWARD_PER_STAGE_AD, sDef - state.stages.def); state.stages.def = sDef; }
 
-    // 技能傷害 / 攻速
+    // 戰鬥加成：技能傷害 / 攻速 / 總傷害（20% 一階；每階 +5 張）
     var sSkill = per20Stage(snap.skill);
     var sAspd  = per20Stage(snap.aspdGain);
-    if (sSkill > state.stages.skill){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sSkill - state.stages.skill); state.stages.skill = sSkill; }
-    if (sAspd  > state.stages.aspd ){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sAspd  - state.stages.aspd ); state.stages.aspd  = sAspd;  }
+    var sTDmg  = per20Stage(snap.totalDmgBonus);
+    if (sSkill > state.stages.skill){ awardSum += giveRewardFixed(REWARD_PER_STAGE_COMBAT, sSkill - state.stages.skill); state.stages.skill = sSkill; }
+    if (sAspd  > state.stages.aspd ){ awardSum += giveRewardFixed(REWARD_PER_STAGE_COMBAT, sAspd  - state.stages.aspd ); state.stages.aspd  = sAspd;  }
+    if (sTDmg  > state.stages.totalDmgBonus){ awardSum += giveRewardFixed(REWARD_PER_STAGE_COMBAT, sTDmg - state.stages.totalDmgBonus); state.stages.totalDmgBonus = sTDmg; }
 
-    // 三率
+    // 探索三率（30% 一階；沿用 +2 張）
     var sExp  = per30Stage(snap.exp);
     var sDrop = per30Stage(snap.drop);
     var sGold = per30Stage(snap.gold);
@@ -250,7 +280,7 @@
     if (sDrop > state.stages.drop){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sDrop - state.stages.drop); state.stages.drop = sDrop; }
     if (sGold > state.stages.gold){ awardSum += giveRewardFixed(REWARD_PER_STAGE_DEFAULT, sGold - state.stages.gold); state.stages.gold = sGold; }
 
-    // 擊殺 / 精英 / Boss / 累傷
+    // 擊殺 / 精英 / Boss / 累傷（幾何門檻；獎勵沿用）
     var sKill  = killStage(snap.kills);
     var sElite = eliteStage(snap.eliteKills);
     var sBoss  = bossStage(snap.bossKills);
@@ -271,11 +301,9 @@
   }
 
   // —— UI：進度條渲染 —— //
-  function segPrimaryBounds(val){
-    var s = primaryStage(val);
-    if (s < 10) return { base: s*100, next: (s+1)*100, stage: s };
-    var base = 1000 + (s-10)*1000;
-    return { base: base, next: base+1000, stage: s };
+  function geometricBounds(val, unit, G){
+    var s = geoStage(val, unit, G);
+    return { base: geoCumForStage(s, unit, G), next: geoCumForStage(s+1, unit, G), stage: s };
   }
   function linearBoundsByUnit(val, unit, stageFn){
     var s = stageFn(val);
@@ -290,7 +318,7 @@
   function bar(pct, note){
     var w = Math.floor(clamp01(pct)*100);
     return ''+
-    '<div style="background:#2a2a2a;border-radius:8px;overflow:hidden;height:10px;margin-top:6px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)">'+
+    '<div style="background:#2a2a2a;border-radius:8px;overflow:hidden;height:10px;margin-top:6px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)">' +
       '<div style="height:100%;width:'+w+'%;background:linear-gradient(90deg,#41d1ff,#6f86ff);box-shadow:0 0 10px rgba(111,134,255,.35) inset;"></div>'+
     '</div>'+
     (note ? '<div style="font-size:12px;opacity:.75;margin-top:4px;text-align:right">'+note+'</div>' : '');
@@ -349,7 +377,7 @@
         stages: {
           level:0,
           str:0, agi:0, int:0, luk:0,
-          atk:0, def:0, skill:0, aspd:0,
+          atk:0, def:0, skill:0, aspd:0, totalDmgBonus:0,
           exp:0, drop:0, gold:0,
           kill:0, elite:0, boss:0, dmg:0
         },
@@ -391,30 +419,33 @@
       html += '<h3 style="margin:6px 0 10px;color:#9fc5ff;">等級（每 10 等；獎勵逐階提高）</h3>';
       html += levelRow();
 
-      html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">主屬性（每階 +2 張）</h3>';
-      html += rowProgress('力量 STR', snap.prim.str, segPrimaryBounds(snap.prim.str), fmtInt);
-      html += rowProgress('敏捷 AGI', snap.prim.agi, segPrimaryBounds(snap.prim.agi), fmtInt);
-      html += rowProgress('智力 INT', snap.prim.int, segPrimaryBounds(snap.prim.int), fmtInt);
-      html += rowProgress('幸運 LUK', snap.prim.luk, segPrimaryBounds(snap.prim.luk), fmtInt);
+      // 主屬性：幾何門檻 + 固定每階 +5 張
+      html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">主屬性（；每階 +5 張）</h3>';
+      html += rowProgress('力量 STR', snap.prim.str, geometricBounds(snap.prim.str, PRIMARY_UNIT, ATTR_GROWTH), fmtInt);
+      html += rowProgress('敏捷 AGI', snap.prim.agi, geometricBounds(snap.prim.agi, PRIMARY_UNIT, ATTR_GROWTH), fmtInt);
+      html += rowProgress('智力 INT', snap.prim.int, geometricBounds(snap.prim.int, PRIMARY_UNIT, ATTR_GROWTH), fmtInt);
+      html += rowProgress('幸運 LUK', snap.prim.luk, geometricBounds(snap.prim.luk, PRIMARY_UNIT, ATTR_GROWTH), fmtInt);
 
-      html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">攻防（每階 +2 張）</h3>';
-      html += rowProgress('攻擊力 ATK', snap.atkEquip, segPrimaryBounds(snap.atkEquip), fmtInt);
-      html += rowProgress('防禦力 DEF', snap.defEquip, segPrimaryBounds(snap.defEquip), fmtInt);
+      // 攻防：幾何門檻 + 固定每階 +5 張
+      html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">攻防（；每階 +5 張）</h3>';
+      html += rowProgress('攻擊力 ATK', snap.atkEquip, geometricBounds(snap.atkEquip, AD_UNIT, ATTR_GROWTH), fmtInt);
+      html += rowProgress('防禦力 DEF', snap.defEquip, geometricBounds(snap.defEquip, AD_UNIT, ATTR_GROWTH), fmtInt);
 
       html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">戰鬥加成（每階 +5 張）</h3>';
-      html += rowProgress('技能傷害', Math.round(snap.skill*100)/100, linearBoundsByUnit(snap.skill, 0.20, per20Stage), fmtPct);
+      html += rowProgress('技能傷害', Math.round(snap.skill*100)/100,  linearBoundsByUnit(snap.skill, 0.20, per20Stage), fmtPct);
       html += rowProgress('攻擊速度(+%)', Math.round(snap.aspdGain*100)/100, linearBoundsByUnit(snap.aspdGain, 0.20, per20Stage), fmtPct);
+      html += rowProgress('總傷害(+%)',  Math.round(snap.totalDmgBonus*100)/100, linearBoundsByUnit(snap.totalDmgBonus, 0.20, per20Stage), fmtPct);
 
-      html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">探索加成（每階 +5 張）</h3>';
+      html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">探索加成（每階 +2 張）</h3>';
       html += rowProgress('經驗值率', Math.round(snap.exp*100)/100,  linearBoundsByUnit(snap.exp, 0.30, per30Stage), fmtPct);
       html += rowProgress('掉寶率',   Math.round(snap.drop*100)/100, linearBoundsByUnit(snap.drop, 0.30, per30Stage), fmtPct);
       html += rowProgress('金幣率',   Math.round(snap.gold*100)/100, linearBoundsByUnit(snap.gold, 0.30, per30Stage), fmtPct);
 
-      html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">累積（擊殺/傷害）</h3>';
-      html += rowProgress('擊殺數（每 1000 / +5 張）', snap.kills,       linearBoundsByUnit(snap.kills, 1000, KILL_UNIT ? function(v){return floor(v/KILL_UNIT);} : function(){return 0;}), fmtInt);
-      html += rowProgress('精英擊殺（每 100 / +10 張）', snap.eliteKills, linearBoundsByUnit(snap.eliteKills, 100, ELITE_UNIT ? function(v){return floor(v/ELITE_UNIT);} : function(){return 0;}), fmtInt);
-      html += rowProgress('Boss 擊殺（每 10 / +20 張）', snap.bossKills,  linearBoundsByUnit(snap.bossKills, 10, BOSS_UNIT ? function(v){return floor(v/BOSS_UNIT);} : function(){return 0;}), fmtInt);
-      html += rowProgress('累積傷害（每 5,000,000 / +20 張）', snap.totalDamage, linearBoundsByUnit(snap.totalDamage, 5000000, DAMAGE_UNIT ? function(v){return floor(v/DAMAGE_UNIT);} : function(){return 0;}), fmtDmg);
+      html += '<h3 style="margin:12px 0 8px;color:#9fc5ff;">累積（擊殺/傷害）— </h3>';
+      html += rowProgress('擊殺數（ / +2 張）',  snap.kills,       geometricBounds(snap.kills,       KILL_UNIT,   GEO_GROWTH), fmtInt);
+      html += rowProgress('精英擊殺（ / +10 張）', snap.eliteKills, geometricBounds(snap.eliteKills,   ELITE_UNIT,  GEO_GROWTH), fmtInt);
+      html += rowProgress('Boss 擊殺（ / +20 張）', snap.bossKills,  geometricBounds(snap.bossKills,    BOSS_UNIT,   GEO_GROWTH), fmtInt);
+      html += rowProgress('累積傷害（ / +20 張）',  snap.totalDamage, geometricBounds(snap.totalDamage, DAMAGE_UNIT, GEO_GROWTH), fmtDmg);
 
       html += '</div>';
       container.innerHTML = html;
