@@ -81,30 +81,30 @@
   }
 
   // ---- 改良版：回復計算 ----
-  function _refill(kind, now){
-    var cfg = KINDS[kind], st = _load(kind);
-    now = now || _now();
+ function _refill(kind, now){
+  var cfg = KINDS[kind], st = _load(kind);
+  now = now || _now();
 
-    if (st.count >= st.cap){
-      // 已滿，校正 lastTs 不得超前
-      st.lastTs = Math.min(now, st.lastTs);
-      _save(kind);
-      return;
-    }
-
-    var elapsed = Math.max(0, now - st.lastTs);
-    if (elapsed < cfg.PERIOD_MS) return; // 不滿一周期
-
-    var add = Math.floor(elapsed / cfg.PERIOD_MS);
-    if (add > 0){
-      var room = st.cap - st.count;
-      var gain = Math.min(add, room);
-      st.count += gain;
-      // ⏱ 對齊實際剩餘時間，不讓 lastTs 超前
-      st.lastTs = now - (elapsed % cfg.PERIOD_MS);
-      _save(kind);
-    }
+  if (st.count >= st.cap){
+    // ✅ 方案 A：滿倉就暫停計時（不再累積時間）
+    st.lastTs = now;
+    _save(kind);
+    return;
   }
+
+  var elapsed = Math.max(0, now - st.lastTs);
+  if (elapsed < cfg.PERIOD_MS) return; // 不滿一週期
+
+  var add = Math.floor(elapsed / cfg.PERIOD_MS);
+  if (add > 0){
+    var room = st.cap - st.count;
+    var gain = Math.min(add, room);
+    st.count += gain;
+    // 對齊剩餘時間
+    st.lastTs = now - (elapsed % cfg.PERIOD_MS);
+    _save(kind);
+  }
+}
 
   // ====== 背包橋接（容錯） ======
   var hasInv = typeof w.getItemQuantity === "function"
