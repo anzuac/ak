@@ -25,7 +25,7 @@ function ensureModalShell(){
     '<div style="position:relative;margin:40px auto;background:#222;color:#fff;border:1px solid #888;border-radius:8px;width:90vw;max-width:350px;max-height:80vh;box-sizing:border-box;display:flex;flex-direction:column;">' +
       '<div style="position:sticky;top:0;background:#111;color:#fff;padding:8px;border-radius:8px 8px 0 0;z-index:2;">' +
         '<button id="tabDaily"        class="quest-tab" data-tab="daily"        style="background:#2d7;border:none;border-radius:6px;color:#fff;padding:6px 8px;margin-right:6px">📅 每日任務</button>' +
-
+        '<button id="tabWeekly"       class="quest-tab" data-tab="weekly"       style="background:#3aa;border:none;border-radius:6px;color:#fff;padding:6px 8px;margin-right:6px">🗓️ 每週任務</button>' +
         '<button id="tabAchievements" class="quest-tab" data-tab="achievements" style="background:#48c;border:none;border-radius:6px;color:#fff;padding:6px 8px;margin-right:6px">🏆 成就任務</button>' +
         '<button id="tabRepeatables"  class="quest-tab" data-tab="repeatables"  style="background:#c85;border:none;border-radius:6px;color:#fff;padding:6px 8px;margin-right:6px">🔁 重複任務</button>' +
         '<button id="questClose" style="position:absolute;right:8px;top:6px;border:none;background:transparent;color:#fff;font-size:16px;cursor:pointer">✖</button>' +
