@@ -1,7 +1,7 @@
 const GLOBAL_DROP_RATES = {
   cube: { name: "轉職寶珠", rate: 0.08 },
   s4: { name: "怪物獎牌", rate: 0.03 },
-  s2: { name: "強化道具兌換券", rate: 0.009 },
+  s2: { name: "強化道具兌換券", rate: 0.09 },
 
   S4: { name: "生命藥水", rate: 0.034 },
   s5: { name: "法力藥水", rate: 0.032 }
