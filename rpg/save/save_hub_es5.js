@@ -1,6 +1,6 @@
 // save_hub_es5.js — 統一存檔中樞（穩定版；讀取絕不寫檔）
 (function(global){
-  var SAVE_KEY = "332422"; // 全遊戲單一存檔包
+  var SAVE_KEY = "GAME_2_1"; // 全遊戲單一存檔包
   var WRITE_DELAY = 300;   // 批次寫入去抖（毫秒）
   var _timer = null;
   var _listeners = { change: [] };
