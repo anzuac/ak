@@ -77,7 +77,7 @@
     {
       kind: 'kills', title: '狩獵連環',
       desc: '擊殺怪物達標，獲得強化石與星痕代幣。',
-      baseThresh: 200,
+      baseThresh: 20,
       baseReward: [{type:'stone', amount:20},{type:'star', amount:3}],
       color: '#3b82f6'
     }
