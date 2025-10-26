@@ -1,9 +1,6 @@
-// quest_repeat_es5.js — 重複任務（V3：SaveHub 中央存檔、五捨六入、移除登入任務、健壯即時重繪）
+// quest_repeat_es5.js — 重複任務（V3：SaveHub 中央存檔、五捨六入、移除登入任務、只在本分頁重繪、達成後進度歸零）
 (function(){
   if (!window.QuestCore) return;
-  if (window.__RepeatV3Loaded) return;     // ✅ 防止重覆初始化
-  window.__RepeatV3Loaded = true;
-
   var SH = window.SaveHub;
 
   // ====== SaveHub（中央存檔；不做舊版遷移）======
@@ -29,7 +26,7 @@
     return s;
   }
 
-  // ✅ 註冊命名空間（version=1；只做 normalize）
+  // 可選：在 SaveHub 註冊版本
   if (SH && typeof SH.registerNamespaces === 'function') {
     SH.registerNamespaces({
       [NS]: {
@@ -41,7 +38,7 @@
 
   function load(){
     try{
-      if (!SH) return defState(); // 沒 SaveHub 也不報錯
+      if (!SH) return defState(); // 沒 SaveHub 就先給預設，避免錯誤
       var s = SH.get(NS, defState());
       return normalize(s);
     }catch(e){ console.error('[repeat] load error', e); return defState(); }
@@ -53,19 +50,8 @@
     }catch(e){ console.error('[repeat] save error', e); }
   }
 
-  // ====== 舊鍵清理（避免舊版 local 殘檔干擾）======
-  (function cleanupLegacyKeys(){
-    try {
-      var oldKeys = [
-        'repeat:v3:local',   // 舊的獨立本地存檔鍵
-        'REPEAT_STATE_V1'    // 更早期鍵（若存在）
-      ];
-      oldKeys.forEach(function(k){ localStorage.removeItem(k); });
-    } catch(_){}
-  })();
-
   // ====== 任務定義（基礎門檻 / 基礎獎勵）======
-  // 完成一次：門檻 ×1.35；獎勵 ×1.1（五捨六入，至少 1）
+  // 完成一次：門檻 ×1.35；獎勵 ×1.10（五捨六入，至少 1）
   var QUESTS = [
     {
       kind: 'goldGain', title: '金幣達人',
@@ -91,34 +77,28 @@
     {
       kind: 'kills', title: '狩獵連環',
       desc: '擊殺怪物達標，獲得強化石與星痕代幣。',
-      baseThresh: 20,
-      baseReward: [{type:'stone', amount:20},{type:'star', amount:3}],
+      baseThresh: 30,
+      baseReward: [{type:'stone', amount:200},{type:'star', amount:3}],
       color: '#3b82f6'
     }
   ];
 
-  var THRESH_MUL = 1.35; // 難度提升
-  var REWARD_MUL = 1.10; // 獎勵提升（五捨六入）
+  var THRESH_MUL = 1.35;   // 難度提升
+  var REWARD_MUL = 1.10;   // 獎勵提升（五捨六入）
 
   var state = load();
 
   // ====== 工具 ======
   function fmt(n){ return Math.floor(n||0).toLocaleString(); }
   function pct(cur,max){ return (max>0)? Math.max(0, Math.min(100, Math.floor((cur/max)*100))) : 0; }
-
   // 五捨六入：小數 <0.6 捨，≥0.6 入
-  function round56(x){
-    var neg = x<0; x = Math.abs(x);
-    var i = Math.floor(x), frac = x - i;
-    var r = (frac>=0.6) ? (i+1) : i;
-    return neg ? -r : r;
-  }
+  function round56(x){ var neg = x<0; x = Math.abs(x); var i = Math.floor(x), f = x - i; var r = (f>=0.6) ? (i+1) : i; return neg ? -r : r; }
 
   function currentThresh(q){
     var done = state.done[q.kind]||0;
     var base = q.baseThresh;
     var val = base * Math.pow(THRESH_MUL, done);
-    return Math.max(1, Math.floor(val));
+    return Math.max(1, Math.floor(val)); // 門檻整數向下取整，至少 1
   }
   function rewardPackFor(q){
     var done = state.done[q.kind]||0;
@@ -142,63 +122,74 @@
       else window.starToken = (window.starToken||0)+a;
     }
   }
-  function grantPack(list){
-    for(var i=0;i<(list||[]).length;i++) grant(list[i]);
-    if (window.updateResourceUI) updateResourceUI();
-  }
+  function grantPack(list){ for(var i=0;i<(list||[]).length;i++) grant(list[i]); if (window.updateResourceUI) updateResourceUI(); }
 
-  // ====== 健壯的即時重繪（只要容器在就重繪）======
+  // ====== 只在本分頁重繪 ======
+  function isActiveTab(){
+    try{ return QuestCore.getActiveTab && QuestCore.getActiveTab()==='repeatables'; }
+    catch(_){ return false; }
+  }
+  var __dirty = false;
   var __rerenderTimer = null;
-  function immediateRerender(force){
-    if (__rerenderTimer && !force) return;
+  function scheduleRender(force){
+    if (!force && !isActiveTab()) { __dirty = true; return; }
+    if (__rerenderTimer) return;
     __rerenderTimer = setTimeout(function(){
       __rerenderTimer = null;
-      try{
-        var box = document.getElementById('questContent');
-        if (!box) return;
-        render();
-      }catch(e){ console.error('[repeat] render fail', e); }
+      if (!isActiveTab()) { __dirty = true; return; }
+      try { render(); __dirty = false; } catch(e){ console.error('[repeat] render fail', e); }
     }, 0);
   }
 
-  // 可超額繼承（每次更動後都重繪 + 寫中央存檔）
+  // ====== 結算：達成後進度直接歸零（不保留溢出），固定順序、加防重入 ======
+  var __settling = false;
   function settleQuest(q, counterKey){
-    var loops=0;
-    while(true){
+    if (__settling) return; // 防止同一拍重入
+    __settling = true;
+    try {
       var need = currentThresh(q);
       var cur  = Math.max(0, state[counterKey]||0);
-      if (cur < need) break;
-      state[counterKey] = cur - need;
-      grantPack(rewardPackFor(q));
-      state.done[q.kind] = (state.done[q.kind]||0) + 1;
-      loops++;
+
+      if (cur >= need){
+        // ✅ 單次判定，進度歸零，不保留溢出
+        state[counterKey] = 0;
+        state.done[q.kind] = (state.done[q.kind]||0) + 1;
+
+        // 先發獎、再存檔、最後重繪（在本分頁時）
+        grantPack(rewardPackFor(q));
+        save(state);
+
+        if (window.logPrepend){
+          logPrepend('✅ 重複任務達成「'+q.title+'」×1（進度已重置）');
+        }
+        scheduleRender(true);
+      } else {
+        // 進度更新也落盤（避免意外關閉丟資料），但不強制重繪其他分頁
+        save(state);
+        scheduleRender(false);
+      }
+    } finally {
+      __settling = false;
     }
-    if (loops>0 && window.logPrepend){
-      logPrepend('✅ 重複任務達成「'+q.title+'」×'+loops);
-    }
-    save(state);
-    immediateRerender(false);
   }
 
-  // ====== 事件回調（所有入口都會觸發重繪）======
+  // ====== 事件回調 ======
   function onGoldGained(a){ if(a>0){ state.goldGain+=a; settleQuest(QUESTS[0],'goldGain'); } }
   function onStoneGained(a){ if(a>0){ state.stoneGain+=a; settleQuest(QUESTS[1],'stoneGain'); } }
   function onDiamondSpent(a){ if(a>0){ state.diamondSpend+=a; settleQuest(QUESTS[2],'diamondSpend'); } }
   function onKills(k){ if(k>0){ state.kills+=k; settleQuest(QUESTS[3],'kills'); } }
 
-  // 包裝既有全域事件（只掛一次）
-  function wrapGlobalOnce(flagKey, fnName, wrapper){
-    if (window[flagKey]) return;
-    window[flagKey] = true;
+  // 包裝既有全域事件（先跑舊函式，再跑我們的；若舊函式內再觸發，__settling 會擋重入）
+  function wrapGlobal(fnName, wrapper){
     var old=window[fnName];
     window[fnName]=function(){
       if(typeof old==='function'){ try{ old.apply(this, arguments); }catch(e){} }
       try{ wrapper.apply(this, arguments); }catch(e){}
     };
   }
-  wrapGlobalOnce('__RepeatWrap_gold',   'DM_onGoldGained',    function(a){ onGoldGained(a); });
-  wrapGlobalOnce('__RepeatWrap_stone',  'DM_onStoneGained',   function(a){ onStoneGained(a); });
-  wrapGlobalOnce('__RepeatWrap_kill',   'DM_onMonsterKilled', function(k){ onKills(k); });
+  wrapGlobal('DM_onGoldGained', function(a){ onGoldGained(a); });
+  wrapGlobal('DM_onStoneGained', function(a){ onStoneGained(a); });
+  wrapGlobal('DM_onMonsterKilled', function(k){ onKills(k); });
 
   // 在真正扣鑽石的地方呼叫（正數）
   window.RM_onDiamondSpent = function(spentAmount){
@@ -243,32 +234,38 @@
 
   function onTabChange(){
     try{
-      if (QuestCore.getActiveTab && QuestCore.getActiveTab()==='repeatables') render();
+      if (QuestCore.getActiveTab && QuestCore.getActiveTab()==='repeatables'){
+        // 切進本分頁時，如有髒資料則立即重繪
+        if (__dirty) { render(); __dirty=false; }
+        else { render(); }
+      }
     }catch(_){}
   }
   function init(){
     var btn=document.getElementById('tabRepeatables');
     if(btn) btn.onclick=function(){ QuestCore.setTab('repeatables'); };
     document.addEventListener('quest:tabchange', onTabChange);
-    // 初次顯示（如果容器在）
-    immediateRerender(true);
 
-    // 若其他模組也動到此 NS（例如匯入存檔），自動同步並重繪
+    // 初次：如果已在本分頁，立即畫一次；否則等切入再畫
+    scheduleRender(true);
+
+    // 監聽 SaveHub：只在本 NS 變動時同步，不搶分頁
     if (SH && typeof SH.on === 'function') {
       SH.on('change', function(ev){
         if (!ev || (ev.type!=='set' && ev.type!=='flush')) return;
-        if (ev.ns && ev.ns !== NS) return; // 只在這個 NS 變更時同步
+        if (ev.ns && ev.ns !== NS) return;
         try {
           var fresh = SH.get(NS, defState());
           state = normalize(fresh);
-          immediateRerender(true);
+          // 不強制切分頁；若當前不是本分頁則標記 dirty
+          scheduleRender(false);
         } catch(e){}
       });
     }
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
 
-  // Export/Import（中央存檔）
+  // ====== Export/Import（中央存檔）======
   window.Repeat_exportState = function () {
     return JSON.parse(JSON.stringify(state));
   };
@@ -276,6 +273,6 @@
     if (!s || typeof s !== 'object') return;
     state = normalize(s);
     save(state);
-    immediateRerender(true);
+    scheduleRender(true);
   };
 })();
