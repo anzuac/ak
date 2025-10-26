@@ -1,6 +1,9 @@
 // quest_repeat_es5.js — 重複任務（V3：SaveHub 中央存檔、五捨六入、移除登入任務、健壯即時重繪）
 (function(){
   if (!window.QuestCore) return;
+  if (window.__RepeatV3Loaded) return;     // ✅ 防止重覆初始化
+  window.__RepeatV3Loaded = true;
+
   var SH = window.SaveHub;
 
   // ====== SaveHub（中央存檔；不做舊版遷移）======
@@ -26,7 +29,7 @@
     return s;
   }
 
-  // 可選：在 SaveHub 註冊版本（若你不需要流程化遷移，這段也可以不寫）
+  // ✅ 註冊命名空間（version=1；只做 normalize）
   if (SH && typeof SH.registerNamespaces === 'function') {
     SH.registerNamespaces({
       [NS]: {
@@ -38,20 +41,31 @@
 
   function load(){
     try{
-      if (!SH) return defState(); // 沒有 SaveHub 就用預設，避免腳本報錯
+      if (!SH) return defState(); // 沒 SaveHub 也不報錯
       var s = SH.get(NS, defState());
       return normalize(s);
     }catch(e){ console.error('[repeat] load error', e); return defState(); }
   }
   function save(s){
     try{
-      if (!SH) return; // 沒有 SaveHub 就不寫
+      if (!SH) return;
       SH.set(NS, normalize(s), { replace:true });
     }catch(e){ console.error('[repeat] save error', e); }
   }
 
-  // 任務定義（基礎門檻 / 基礎獎勵）
-  // 完成一次：門檻 ×1.2；獎勵 ×1.05（五捨六入，至少 1）
+  // ====== 舊鍵清理（避免舊版 local 殘檔干擾）======
+  (function cleanupLegacyKeys(){
+    try {
+      var oldKeys = [
+        'repeat:v3:local',   // 舊的獨立本地存檔鍵
+        'REPEAT_STATE_V1'    // 更早期鍵（若存在）
+      ];
+      oldKeys.forEach(function(k){ localStorage.removeItem(k); });
+    } catch(_){}
+  })();
+
+  // ====== 任務定義（基礎門檻 / 基礎獎勵）======
+  // 完成一次：門檻 ×1.35；獎勵 ×1.1（五捨六入，至少 1）
   var QUESTS = [
     {
       kind: 'goldGain', title: '金幣達人',
@@ -83,8 +97,8 @@
     }
   ];
 
-  var THRESH_MUL = 1.2;   // 難度提升
-  var REWARD_MUL = 1.05;  // 獎勵提升（五捨六入）
+  var THRESH_MUL = 1.35; // 難度提升
+  var REWARD_MUL = 1.10; // 獎勵提升（五捨六入）
 
   var state = load();
 
@@ -104,7 +118,7 @@
     var done = state.done[q.kind]||0;
     var base = q.baseThresh;
     var val = base * Math.pow(THRESH_MUL, done);
-    return Math.max(1, Math.floor(val)); // 門檻整數向下取整，至少 1
+    return Math.max(1, Math.floor(val));
   }
   function rewardPackFor(q){
     var done = state.done[q.kind]||0;
@@ -128,7 +142,10 @@
       else window.starToken = (window.starToken||0)+a;
     }
   }
-  function grantPack(list){ for(var i=0;i<(list||[]).length;i++) grant(list[i]); if (window.updateResourceUI) updateResourceUI(); }
+  function grantPack(list){
+    for(var i=0;i<(list||[]).length;i++) grant(list[i]);
+    if (window.updateResourceUI) updateResourceUI();
+  }
 
   // ====== 健壯的即時重繪（只要容器在就重繪）======
   var __rerenderTimer = null;
@@ -159,7 +176,7 @@
     if (loops>0 && window.logPrepend){
       logPrepend('✅ 重複任務達成「'+q.title+'」×'+loops);
     }
-    save(state);            // 寫入 SaveHub
+    save(state);
     immediateRerender(false);
   }
 
@@ -169,17 +186,19 @@
   function onDiamondSpent(a){ if(a>0){ state.diamondSpend+=a; settleQuest(QUESTS[2],'diamondSpend'); } }
   function onKills(k){ if(k>0){ state.kills+=k; settleQuest(QUESTS[3],'kills'); } }
 
-  // 包裝既有全域事件
-  function wrapGlobal(fnName, wrapper){
+  // 包裝既有全域事件（只掛一次）
+  function wrapGlobalOnce(flagKey, fnName, wrapper){
+    if (window[flagKey]) return;
+    window[flagKey] = true;
     var old=window[fnName];
     window[fnName]=function(){
       if(typeof old==='function'){ try{ old.apply(this, arguments); }catch(e){} }
       try{ wrapper.apply(this, arguments); }catch(e){}
     };
   }
-  wrapGlobal('DM_onGoldGained', function(a){ onGoldGained(a); });
-  wrapGlobal('DM_onStoneGained', function(a){ onStoneGained(a); });
-  wrapGlobal('DM_onMonsterKilled', function(k){ onKills(k); });
+  wrapGlobalOnce('__RepeatWrap_gold',   'DM_onGoldGained',    function(a){ onGoldGained(a); });
+  wrapGlobalOnce('__RepeatWrap_stone',  'DM_onStoneGained',   function(a){ onStoneGained(a); });
+  wrapGlobalOnce('__RepeatWrap_kill',   'DM_onMonsterKilled', function(k){ onKills(k); });
 
   // 在真正扣鑽石的地方呼叫（正數）
   window.RM_onDiamondSpent = function(spentAmount){
@@ -214,7 +233,6 @@
 
   function render(){
     var box=document.getElementById('questContent'); if(!box) return;
-    // 直接用記憶中狀態，避免剛 save() 又被 get() 舊值覆蓋
     var html='';
     (function(){ var q=QUESTS[0], need=currentThresh(q), cur=state.goldGain,    done=state.done[q.kind]||0; html+=cardHTML(q, cur, need, done); })();
     (function(){ var q=QUESTS[1], need=currentThresh(q), cur=state.stoneGain,   done=state.done[q.kind]||0; html+=cardHTML(q, cur, need, done); })();
@@ -238,9 +256,8 @@
     // 若其他模組也動到此 NS（例如匯入存檔），自動同步並重繪
     if (SH && typeof SH.on === 'function') {
       SH.on('change', function(ev){
-        if (!ev || ev.type!=='set' && ev.type!=='flush') return;
-        // 只在這個 NS 變更時同步
-        if (ev.ns && ev.ns !== NS) return;
+        if (!ev || (ev.type!=='set' && ev.type!=='flush')) return;
+        if (ev.ns && ev.ns !== NS) return; // 只在這個 NS 變更時同步
         try {
           var fresh = SH.get(NS, defState());
           state = normalize(fresh);
