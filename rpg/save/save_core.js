@@ -1,19 +1,16 @@
-// ==========================
-// save_core.js — 單槽穩定版（取消 A/B，含自救與舊制轉寫）
-// ==========================
+// save_core.js — 單槽穩定版（ASCII NS + 載入初期寫入節流保護）
 (() => {
-  const NS = "GAME_SAVE_C16";
-  const KEY_DATA    = `${NS}:data`;    // 主存檔
-  const KEY_META    = `${NS}:meta`;    // 校驗/長度/時間
-  const KEY_TMP     = `${NS}:tmp`;     // 寫入時的臨時檔
-  const KEY_BACKUP  = `${NS}:backup`;  // 上一次成功保存的備份
+  const NS = "udh333f_37";  // ← 純 ASCII，避免某些環境 key 正規化問題
+  const KEY_DATA    = `${NS}:data`;
+  const KEY_META    = `${NS}:meta`;
+  const KEY_TMP     = `${NS}:tmp`;
+  const KEY_BACKUP  = `${NS}:backup`;
 
-  // 舊制（自動轉寫 & 讀取用；不再寫入）
-  const OLD_NS = "GAME_SAVE_V2"; // 你的舊 A/B 制
+  const OLD_NS = "GAME_SAVE_V2";
   const OLD_MANIFEST = `${OLD_NS}:manifest`;
   const OLD_SLOT_A   = `${OLD_NS}:slotA`;
   const OLD_SLOT_B   = `${OLD_NS}:slotB`;
-  const OLD_SINGLE   = `${OLD_NS}`;    // 舊單鍵（若曾存在）
+  const OLD_SINGLE   = `${OLD_NS}`;
 
   const SCHEMA_VERSION = 2;
   const SAVE_MIN_INTERVAL_MS = 1500;
@@ -22,6 +19,10 @@
   let savePending = false;
   let lastSaveAt = 0;
   let flushTimer = null;
+
+  // 🚧 載入初期保護：前 2000ms 不主動 flush（避免跟其他模組初始化寫衝）
+  const BOOT_TS = Date.now();
+  function bootBusy(){ return (Date.now() - BOOT_TS) < 2000; }
 
   function now() { return Date.now(); }
   function checksum(str) {
@@ -35,7 +36,6 @@
   function safeParse(raw) { try { return JSON.parse(raw); } catch { return null; } }
   function readMeta() { return safeParse(localStorage.getItem(KEY_META)); }
 
-  // ====== 構建存檔 ======
   function buildSaveState() {
     if (typeof player === 'undefined' || !player) return null;
     return {
@@ -62,15 +62,18 @@
       magicShieldEnabled: !!player.magicShieldEnabled,
       baseSkillDamage: Number(player.baseSkillDamage ?? 0.10),
       coreBonusData: player.coreBonus?.bonusData ?? null,
-      elementEquipmentData: (typeof window.getElementGearData === 'function') ? window.getElementGearData() : (window.elementGearData ?? null),
+      elementEquipmentData: (typeof window.getElementGearData === 'function')
+        ? window.getElementGearData()
+        : (window.elementGearData ?? null),
       inventoryData: window.inventory || {},
       skillsState: (typeof window.Skills_exportState === 'function') ? window.Skills_exportState() : null,
       jobChangeDoneLevels: Array.from(window.__jobChangeDoneLevels || new Set()),
       recoveryLevel: (player?.recoverySystem?.level ?? 1),
+      currentHP: Number.isFinite(player.currentHP) ? player.currentHP : undefined,
+      currentMP: Number.isFinite(player.currentMP) ? player.currentMP : undefined,
     };
   }
 
-  // ====== 資料遷移 ======
   function migrate(data) {
     if (!data || typeof data !== 'object') return null;
     const v = Number(data.schemaVersion) || 1;
@@ -82,10 +85,9 @@
     return data;
   }
 
-  // ====== 載入套用 ======
   function applyLoadedState(loadedData) {
-    player.nickname = loadedData.nickname ?? player.nickname ?? "";
-    player.job      = loadedData.job ?? player.job ?? "";
+    player.nickname = (typeof loadedData.nickname === 'string') ? loadedData.nickname : (player.nickname ?? "");
+    player.job      = (typeof loadedData.job === 'string') ? loadedData.job : (player.job ?? "");
     player.level    = Number(loadedData.level) || 1;
     player.exp      = Number(loadedData.exp) || 0;
     player.statPoints = Number(loadedData.statPoints) || 0;
@@ -96,7 +98,14 @@
     player.baseSkillDamage = Number(loadedData.baseSkillDamage ?? 0.10);
 
     if (loadedData.baseStats) Object.assign(player.baseStats, loadedData.baseStats);
-    if (loadedData.coreBonusData && player.coreBonus?.bonusData) Object.assign(player.coreBonus.bonusData, loadedData.coreBonusData);
+
+    // coreBonusData：確保骨架存在
+    if (loadedData.coreBonusData) {
+      player.coreBonus = player.coreBonus || {};
+      player.coreBonus.bonusData = player.coreBonus.bonusData || {};
+      Object.assign(player.coreBonus.bonusData, loadedData.coreBonusData);
+    }
+
     if (loadedData.inventoryData && window.inventory) Object.assign(window.inventory, loadedData.inventoryData);
     if (loadedData.skillsState && typeof window.Skills_applyState === 'function') window.Skills_applyState(loadedData.skillsState);
     window.__jobChangeDoneLevels = new Set(loadedData.jobChangeDoneLevels || []);
@@ -109,42 +118,33 @@
     }
 
     if (typeof window.recomputeTotalStats === 'function') window.recomputeTotalStats();
-    player.currentHP = player.totalStats?.hp ?? 100;
-    player.currentMP = player.totalStats?.mp ?? 0;
+
+    const maxHP = player.totalStats?.hp ?? 100;
+    const maxMP = player.totalStats?.mp ?? 0;
+    if (typeof loadedData.currentHP === 'number') player.currentHP = Math.max(0, Math.min(loadedData.currentHP, maxHP)); else player.currentHP = maxHP;
+    if (typeof loadedData.currentMP === 'number') player.currentMP = Math.max(0, Math.min(loadedData.currentMP, maxMP)); else player.currentMP = maxMP;
+
     player.shield = 0;
     player.statusEffects = {};
     player.expToNext = (typeof window.getExpToNext === 'function') ? window.getExpToNext(player.level) : 100;
 
     if (typeof window.rebuildActiveSkills === 'function') window.rebuildActiveSkills();
     if (typeof window.updateAllUI === 'function') window.updateAllUI();
-
-    if (typeof window.GameSave__notifyApplied === 'function') {
-      window.GameSave__notifyApplied();
-    }
+    if (typeof window.GameSave__notifyApplied === 'function') window.GameSave__notifyApplied();
   }
 
-  // ====== 單槽安全寫入 ======
   function writeSingle(json) {
-    // 1) 寫入 tmp
+    // 1) tmp
     localStorage.setItem(KEY_TMP, json);
-
-    // 2) 將現有主檔覆寫到 backup（若有）
+    // 2) 主檔 → 備份（若有舊主檔）
     const prev = localStorage.getItem(KEY_DATA);
     if (prev) localStorage.setItem(KEY_BACKUP, prev);
-
-    // 3) 寫主檔
+    // 3) 主檔
     localStorage.setItem(KEY_DATA, json);
-
-    // 4) 寫 meta（最後寫，代表一次成功的完整寫入）
+    // 4) meta
     const sum = checksum(json);
-    localStorage.setItem(KEY_META, JSON.stringify({
-      schemaVersion: SCHEMA_VERSION,
-      savedAt: now(),
-      size: json.length,
-      checksum: sum
-    }));
-
-    // 5) 移除 tmp
+    localStorage.setItem(KEY_META, JSON.stringify({ schemaVersion: SCHEMA_VERSION, savedAt: now(), size: json.length, checksum: sum }));
+    // 5) 刪 tmp
     localStorage.removeItem(KEY_TMP);
   }
 
@@ -156,9 +156,7 @@
     return true;
   }
 
-  // ====== 舊制讀取（僅用於轉寫或救檔） ======
   function readOldFormatRaw() {
-    // 優先讀 manifest 指向的 A/B
     const mRaw = localStorage.getItem(OLD_MANIFEST);
     if (mRaw) {
       try {
@@ -171,29 +169,20 @@
         if (r2) return r2;
       } catch {}
     }
-    // 舊單鍵
     const oldSingle = localStorage.getItem(OLD_SINGLE);
     if (oldSingle) return oldSingle;
     return null;
   }
 
   function loadSingleRaw() {
-    // 先讀主檔並驗證
     const raw = localStorage.getItem(KEY_DATA);
     if (verifyAgainstMeta(raw)) return raw;
-
-    // 主檔壞了 → 試 backup
     const bak = localStorage.getItem(KEY_BACKUP);
     if (bak) return bak;
-
-    // 再試 tmp（可能中斷時留下）
     const tmp = localStorage.getItem(KEY_TMP);
     if (tmp) return tmp;
-
-    // 最後試舊制
     const old = readOldFormatRaw();
     if (old) return old;
-
     return null;
   }
 
@@ -210,6 +199,7 @@
 
   function scheduleSave() {
     savePending = true;
+    if (bootBusy()) return; // ⛔ 開場 2 秒內：只標記待寫，先不 flush
     const elapsed = now() - lastSaveAt;
     if (elapsed >= SAVE_MIN_INTERVAL_MS) {
       clearTimeout(flushTimer); flushTimer = null;
@@ -226,39 +216,22 @@
     let data = safeParse(raw);
     if (!data) return false;
     data = migrate(data);
-    // 若來源不是本制主檔，成功載入後回寫成單槽格式，讓之後更穩定
-    try {
-      writeSingle(JSON.stringify(data));
-    } catch(e) {
-      // 回寫失敗也不影響遊戲繼續跑
-      console.warn("回寫單槽失敗（不影響遊戲進行）：", e);
-    }
+    try { writeSingle(JSON.stringify(data)); } catch(e) { console.warn("回寫單槽失敗（不影響遊戲進行）：", e); }
     applyLoadedState(data);
     return true;
   }
 
-  // ====== 對外 API ======
   function saveGame(){ scheduleSave(); }
-let __loadingOnce__ = false;
-
-function loadGame() {
-  if (__loadingOnce__) return true;     // 第二次直接當成功，避免重跑
-  __loadingOnce__ = true;
-
-  const raw = loadSingleRaw();
-  if (!raw) { __loadingOnce__ = false; return false; } // 沒存檔，允許日後再試
-
-  try {
-    const ok = migrateAndApply(raw);
-    return ok; // 成功就保持 true，不再重載
-  } catch (e) {
-    __loadingOnce__ = false;
-    console.error("❌ Load failed:", e);
-    return false;
+  let __loadingOnce__ = false;
+  function loadGame() {
+    if (__loadingOnce__) return true;
+    __loadingOnce__ = true;
+    const raw = loadSingleRaw();
+    if (!raw) { __loadingOnce__ = false; return false; }
+    try { return migrateAndApply(raw); }
+    catch (e) { __loadingOnce__ = false; console.error("❌ Load failed:", e); return false; }
   }
-}
   function hasGameSave() {
-    // 只要主檔/備份/舊制其一存在，就視為「有機會載入」
     return !!(localStorage.getItem(KEY_DATA) ||
               localStorage.getItem(KEY_BACKUP) ||
               localStorage.getItem(KEY_TMP) ||
