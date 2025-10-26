@@ -71,14 +71,14 @@
       kind: 'diamondSpend', title: '豪擲千金',
       desc: '鑽石消費達標，回饋大量鑽石（此任務維持發鑽石）。',
       baseThresh: 10000,
-      baseReward: [{type:'diamond', amount:200}],
+      baseReward: [{type:'diamond', amount:400}],
       color: '#f59e0b'
     },
     {
       kind: 'kills', title: '狩獵連環',
       desc: '擊殺怪物達標，獲得強化石與星痕代幣。',
-      baseThresh: 30,
-      baseReward: [{type:'stone', amount:200},{type:'star', amount:3}],
+      baseThresh: 50,
+      baseReward: [{type:'stone', amount:300},{type:'star', amount:4}],
       color: '#3b82f6'
     }
   ];
