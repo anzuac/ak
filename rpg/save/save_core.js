@@ -1,6 +1,6 @@
 // save_core.js — 單槽穩定版（ASCII NS + 載入初期寫入節流保護）
 (() => {
-  const NS = "udh333f_37";  // ← 純 ASCII，避免某些環境 key 正規化問題
+  const NS = "GAME_1_1";  // ← 純 ASCII，避免某些環境 key 正規化問題
   const KEY_DATA    = `${NS}:data`;
   const KEY_META    = `${NS}:meta`;
   const KEY_TMP     = `${NS}:tmp`;
