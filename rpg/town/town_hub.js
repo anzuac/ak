@@ -151,12 +151,22 @@
       }
     }
 
-    // Modal 開啟時每 ~1s 重繪；或外部要求立即重繪
+// Modal 開啟時每 ~1s 重繪；或外部要求立即重繪
     _renderAccum += dt;
     if ((_modal && _modal.style.display === 'flex' && _renderAccum >= 1) || _rerenderPending) {
-      _renderAccum = 0;
-      _rerenderPending = false;
-      renderActive();
+      // ★ 新增：如果是「每秒重繪」觸發，檢查分頁是否禁用自動重繪
+      var cur = getTab(_activeId);
+      var isPeriodic = (_modal && _modal.style.display === 'flex' && _renderAccum >= 1);
+      var allowPeriodic = !(cur && cur.noAutoRerender === true);
+
+      if (_rerenderPending || allowPeriodic) {
+        _renderAccum = 0;
+        _rerenderPending = false;
+        renderActive();
+      } else {
+        // 當前分頁不允許「自動重繪」→ 只清掉 periodic 計時器，保留 pending（下次仍可被 requestRerender 觸發）
+        if (isPeriodic) _renderAccum = 0;
+      }
     }
 
     requestAnimationFrame(tickLoop);

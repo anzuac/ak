@@ -238,15 +238,15 @@
   // 主群步進（半級倍率）：越高越陡，SSS+ 會到數百萬
   function stepFor(label){
     var base = label.replace(/[+\-]/g, "");
-    if (base === "SSS") return 7.00;
-    if (base === "SS")  return 4.86;
-    if (base === "S")   return 3.48;
-    if (base === "A")   return 2.36;
-    if (base === "B")   return 1.95;
-    if (base === "C")   return 1.58;
-    if (base === "D")   return 1.27;
-    if (base === "E")   return 1.20;
-    return 1.08; // F
+    if (base === "SSS") return 17.00;
+    if (base === "SS")  return 12.86;
+    if (base === "S")   return 8.48;
+    if (base === "A")   return 6.36;
+    if (base === "B")   return 5.95;
+    if (base === "C")   return 4.58;
+    if (base === "D")   return 3.27;
+    if (base === "E")   return 2.20;
+    return 1.62; // F
   }
 
   // 建門檻：從 F- 開始一路往上乘

@@ -8,19 +8,20 @@
 
 // 初始背包資料（可依需求調整；不填也行）
 const inventory = {
-  "sp點數券": 10,
-  "強化道具兌換券": 5,
-  "技能強化券": 1
+
+  "能力方塊": 0,
+  "裝備解放石": 0
 };
 
 // 類別定義（鍵：代號；值：顯示）
 const CATEGORIES = {
   potion:  "藥水",
-  ticket:  "票券",
+  ticket:  "消耗券",
   enhance: "強化類",
+  2: "潛能類",
   material:"素材",
 };
-const CATEGORY_ORDER = ["potion", "ticket", "enhance", "material"];
+const CATEGORY_ORDER = ["potion", "ticket", "enhance","2", "material"];
 
 // —— 自動分類規則（優先順序由上到下） ——
 // 符合任一 regex 即套用該類別；沒命中則歸「素材」
@@ -30,6 +31,9 @@ const AUTO_RULES = [
 
   // 票券
   { cat: "ticket",  re: /(券|票|憑證|卷|ticket)/i },
+
+
+ { cat: "2",  re: /(方塊|潛能)/i },
 
   // 強化類
   { cat: "enhance", re: /(強化|突破|星力|衝星|升級|精鍊|精煉|鍛造|強化石|升級石|寶珠|符文|附魔)/i },

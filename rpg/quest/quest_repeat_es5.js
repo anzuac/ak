@@ -1,143 +1,161 @@
-// quest_repeat_es5.js －－ 重複任務（可無限循環，超額繼承，達成即發獎）
+// quest_repeat_es5.js — 重複任務（V4：回歸 SaveHub 主控存檔）
 (function(){
-  if (!window.QuestCore) return;
+  if (!window.QuestCore || !window.SaveHub) return;
 
-  var STORAGE_KEY = 'REPEAT_STATE_V1';
-
-  // 門檻設定
-  var THRESH = {
-    goldGain:     2000000,  // 楓幣每獲得 10 萬 → 鑽石×2
-    stoneGain:    40000,   // 強化石每獲得 1 萬 → 鑽石×1
-    diamondSpend: 10000,   // 鑽石每消費 1 萬 → 鑽石×100
-    kills:        100,     // 擊殺 100 隻 → 強化石100 + 鑽石×1
-    loginDays:    7,       // 登入 7 天 → 鑽石×15 + 任務獎牌×2
-    daily50:      50       // 每日任務完成 50 次（只算前四項）→ 鑽石×20
-  };
-
-  // 狀態
-  var state = {
-    date: '',
-    goldGain: 0,
-    stoneGain: 0,
-    diamondSpend: 0,
-    kills: 0,
-    loginDaysAccum: 0,
-    dailyCompletedAccum: 0,
-    done: { goldGain:0, stoneGain:0, diamondSpend:0, kills:0, login7:0, daily50:0 }
-  };
-
-  function pad2(n){ return (n<10?'0':'')+n; }
-  function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
-  function load(){
-    try{ var raw=localStorage.getItem(STORAGE_KEY); if(raw){ var o=JSON.parse(raw); if(o) state=o; } }catch(e){}
-    if (!state || typeof state!=='object') state = { date:'', goldGain:0, stoneGain:0, diamondSpend:0, kills:0, loginDaysAccum:0, dailyCompletedAccum:0, done:{goldGain:0,stoneGain:0,diamondSpend:0,kills:0,login7:0,daily50:0} };
-    save();
-  }
-  function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
-
-  // 發獎
-  function grant(rew){
-    var t=rew.type;
-    if(t==='gold'&&rew.amount>0){ if(typeof player!=='undefined') player.gold=(player.gold||0)+rew.amount; }
-    else if(t==='stone'&&rew.amount>0){ if(typeof player!=='undefined') player.stone=(player.stone||0)+rew.amount; }
-    else if(t==='diamond'&&rew.amount>0){ if(typeof player!=='undefined') player.gem=(player.gem||0)+rew.amount; }
-    else if(t==='diamond_box'){ var v=(rew.min||0)+Math.floor(Math.random()*((rew.max||0)-(rew.min||0)+1)); if(typeof player!=='undefined') player.gem=(player.gem||0)+v; logPrepend&&logPrepend('🎁 寶箱開出 '+v+' 鑽石！'); }
-    else if (t === 'medal' && rew.amount > 0) {
-  if (typeof addItem === "function") {
-    addItem("任務獎牌", rew.amount); // ✅ 發到背包
-  } else {
-    window.missionMedal = (window.missionMedal || 0) + rew.amount; // 備援
-  }
-  if (typeof logPrepend === "function") {
-    logPrepend('🏅 獲得任務獎牌 ×' + rew.amount);
-  }
-}
-  }
-  function grantPack(list){
-    for(var i=0;i<(list||[]).length;i++) grant(list[i]);
-    updateResourceUI&&updateResourceUI();
-  }
-
-  // 超額繼承：可一次觸發多次
-  function payoutLoop(counterKey, threshold, rewardPack, doneKey){
-    var loops=0;
-    while(state[counterKey] >= threshold){
-      state[counterKey] -= threshold;
-      loops++;
-    }
-    if(loops>0){
-      for(var i=0;i<loops;i++) grantPack(rewardPack);
-      state.done[doneKey]=(state.done[doneKey]||0)+loops;
-      logPrepend&&logPrepend('✅ 重複任務達成（'+doneKey+'）×'+loops);
-    }
-  }
-
-  // 規則實作
-  function onGoldGained(a){ if(a>0){ state.goldGain+=a; payoutLoop('goldGain',THRESH.goldGain,[{type:'diamond',amount:2}],'goldGain'); } }
-  function onStoneGained(a){ if(a>0){ state.stoneGain+=a; payoutLoop('stoneGain',THRESH.stoneGain,[{type:'diamond',amount:1}],'stoneGain'); } }
-  function onDiamondSpent(a){ if(a>0){ state.diamondSpend+=a; payoutLoop('diamondSpend',THRESH.diamondSpend,[{type:'diamond',amount:100}],'diamondSpend'); } }
-  function onKills(k){ if(k>0){ state.kills+=k; payoutLoop('kills',THRESH.kills,[{type:'stone',amount:100},{type:'diamond',amount:1}],'kills'); } }
-  function onLoginUniqueDay(){
-    var t=todayStr();
-    if(state.date!==t){
-      state.date=t;
-      state.loginDaysAccum+=1;
-      payoutLoop('loginDaysAccum',THRESH.loginDays,[{type:'diamond',amount:15},{type:'medal',amount:2}],'login7');
-    }
-  }
-  function onDailyCompletedOnce(){
-    state.dailyCompletedAccum+=1;
-    payoutLoop('dailyCompletedAccum',THRESH.daily50,[{type:'diamond',amount:20}],'daily50');
-  }
-
-  // 包裝既有全域事件（你不用改原本程式）
-  function wrapGlobal(fnName, wrapper){
-    var old=window[fnName];
-    window[fnName]=function(){
-      if(typeof old==='function'){ try{ old.apply(this, arguments); }catch(e){} }
-      try{ wrapper.apply(this, arguments); }catch(e){}
-      save();
+  // ====== SaveHub（中央存檔）======
+  var NS = 'repeat:v4';
+  function defState(){
+    return {
+      goldGain:0, stoneGain:0, diamondSpend:0, kills:0,
+      done:{ goldGain:0, stoneGain:0, diamondSpend:0, kills:0 }
     };
   }
+  function normalize(s){
+    if (!s || typeof s!=='object') s = defState();
+    s.goldGain = Math.max(0, Number(s.goldGain||0));
+    s.stoneGain = Math.max(0, Number(s.stoneGain||0));
+    s.diamondSpend = Math.max(0, Number(s.diamondSpend||0));
+    s.kills = Math.max(0, Number(s.kills||0));
+    s.done = s.done || { goldGain:0, stoneGain:0, diamondSpend:0, kills:0 };
+    ['goldGain','stoneGain','diamondSpend','kills'].forEach(function(k){
+      s.done[k] = Math.max(0, Number(s.done[k]||0));
+    });
+    return s;
+  }
+  function load(){ return normalize(SaveHub.getOrInit(NS, defState())); }
+  function save(s){ SaveHub.set(NS, normalize(s), {replace:true}); }
 
-  load();
-  wrapGlobal('DM_onLogin', function(){ onLoginUniqueDay(); });
-  wrapGlobal('DM_onGoldGained', function(a){ onGoldGained(a); });
-  wrapGlobal('DM_onStoneGained', function(a){ onStoneGained(a); });
-  wrapGlobal('DM_onMonsterKilled', function(k){ onKills(k); });
-  wrapGlobal('Weekly_onDailyCompleted', function(){ onDailyCompletedOnce(); });
+  // 任務定義
+  var QUESTS = [
+    {
+      kind: 'goldGain', title: '金幣達人',
+      desc: '擊殺怪物獲得金幣達標可得星痕代幣。',
+      baseThresh: 200000,
+      baseReward: [{type:'star', amount:2}],
+      color: '#22c55e'
+    },
+    {
+      kind: 'stoneGain', title: '礦藏大師',
+      desc: '擊殺怪物獲得強化石。',
+      baseThresh: 40000,
+      baseReward: [{type:'star', amount:5}],
+      color: '#10b981'
+    },
+    {
+      kind: 'diamondSpend', title: '豪擲千金',
+      desc: '鑽石消費達標，回饋大量鑽石（此任務維持發鑽石）。',
+      baseThresh: 10000,
+      baseReward: [{type:'diamond', amount:100}],
+      color: '#f59e0b'
+    },
+    {
+      kind: 'kills', title: '狩獵連環',
+      desc: '擊殺怪物達標，獲得強化石與星痕代幣。',
+      baseThresh: 20,
+      baseReward: [{type:'stone', amount:20},{type:'star', amount:3}],
+      color: '#3b82f6'
+    }
+  ];
 
-  // 你需要在真正「扣鑽石」的地方呼叫這個（傳此次消費量，正數）
-  window.RM_onDiamondSpent = function(spentAmount){
-    load();
-    onDiamondSpent(spentAmount||0);
-    save();
+  var THRESH_MUL = 1.4;
+  var REWARD_MUL = 1.1;
+
+  var state = load();
+
+  // ====== 工具 ======
+  function fmt(n){ return Math.floor(n||0).toLocaleString(); }
+  function pct(cur,max){ return (max>0)? Math.max(0, Math.min(100, Math.floor((cur/max)*100))) : 0; }
+  function round56(x){ var neg=x<0; x=Math.abs(x); var i=Math.floor(x),f=x-i; return neg?-(f>=0.6?i+1:i):(f>=0.6?i+1:i); }
+
+  function currentThresh(q){
+    var done = state.done[q.kind]||0;
+    return Math.max(1, Math.floor(q.baseThresh * Math.pow(THRESH_MUL, done)));
+  }
+  function rewardPackFor(q){
+    var done = state.done[q.kind]||0;
+    var mul = Math.pow(REWARD_MUL, done);
+    return q.baseReward.map(r => ({
+      type:r.type,
+      amount: Math.max(1, round56((r.amount||0)*mul))
+    }));
+  }
+
+  function grant(r){
+    var t=r.type, a=Math.max(0, Math.floor(r.amount||0));
+    if(a<=0)return;
+    if(t==='gold'){player.gold+=a;}
+    else if(t==='stone'){player.stone+=a;}
+    else if(t==='diamond'){player.gem+=a;}
+    else if(t==='star'){ addItem && addItem('星痕代幣',a); }
+  }
+  function grantPack(list){ list.forEach(grant); updateResourceUI&&updateResourceUI(); }
+
+  // ====== 任務處理 ======
+  function settleQuest(q,key){
+    var loops=0;
+    while(state[key]>=currentThresh(q)){
+      state[key]-=currentThresh(q);
+      grantPack(rewardPackFor(q));
+      state.done[q.kind]++;
+      loops++;
+    }
+    if(loops>0){ logPrepend&&logPrepend('✅ 重複任務達成「'+q.title+'」×'+loops); save(state); }
+  }
+
+  // ====== 事件回調 ======
+  function onGoldGained(a){ if(a>0){ state.goldGain+=a; settleQuest(QUESTS[0],'goldGain'); } }
+  function onStoneGained(a){ if(a>0){ state.stoneGain+=a; settleQuest(QUESTS[1],'stoneGain'); } }
+  function onDiamondSpent(a){ if(a>0){ state.diamondSpend+=a; settleQuest(QUESTS[2],'diamondSpend'); } }
+  function onKills(k){ if(k>0){ state.kills+=k; settleQuest(QUESTS[3],'kills'); } }
+
+  function wrapGlobal(fn,wrap){
+    var old=window[fn];
+    window[fn]=function(){
+      old&&old.apply(this,arguments);
+      try{wrap.apply(this,arguments);}catch(e){}
+    };
+  }
+  wrapGlobal('DM_onGoldGained', onGoldGained);
+  wrapGlobal('DM_onStoneGained', onStoneGained);
+  wrapGlobal('DM_onMonsterKilled', onKills);
+
+  window.RM_onDiamondSpent = function(spent){
+    state = load(); onDiamondSpent(spent||0);
   };
 
-  // 分頁 UI：repeatables
-  function row(title, desc, cur, max, doneTimes, color){
-    if(cur>max) cur=max;
-    var pct=max>0?Math.floor((cur/max)*100):0;
-    return ''+
-      '<div style="padding:8px 0;border-bottom:1px solid #444;">'+
-        '<div style="font-weight:700;">'+title+'</div>'+
-        '<div style="font-size:12px;color:#999;">'+desc+'</div>'+
-        '<div style="height:8px;background:#333;border-radius:8px;overflow:hidden;margin-top:6px;"><div style="height:8px;width:'+pct+'%;background:'+color+';"></div></div>'+
-        '<div style="font-size:12px;color:#aaa;margin-top:4px;">進度：'+cur+' / '+max+'　|　累計完成：'+doneTimes+' 次</div>'+
-      '</div>';
+  // ====== UI ======
+  function cardHTML(q,cur,need,done){
+    var rewards = rewardPackFor(q).map(r=>{
+      var n=(r.type==='diamond'?'鑽石':r.type==='star'?'星痕代幣':r.type==='gold'?'金幣':r.type==='stone'?'強化石':r.type);
+      return n+' ×'+fmt(r.amount);
+    }).join('、');
+    var bar=pct(cur,need);
+    return `
+      <div style="border:1px solid #1f2937;border-radius:12px;background:#0b1220;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-weight:900">${q.title}</div>
+          <div style="opacity:.85;font-size:12px">已完成：<b>${fmt(done)}</b> 次</div>
+        </div>
+        <div style="opacity:.9;font-size:12px;margin-bottom:8px">${q.desc}</div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:2px">
+          <div>
+            <div style="font-size:12px;opacity:.9;margin-bottom:4px">當前門檻：<b>${fmt(need)}</b>　|　進度：<b>${fmt(cur)}</b></div>
+            <div style="height:10px;background:#111827;border:1px solid #233042;border-radius:999px;overflow:hidden">
+              <div style="height:100%;width:${bar}%;background:${q.color}"></div>
+            </div>
+          </div>
+          <div style="text-align:right;white-space:nowrap;font-size:12px;opacity:.95">下次獎勵：<b>${rewards}</b></div>
+        </div>
+      </div>`;
   }
 
   function render(){
     var box=document.getElementById('questContent'); if(!box) return;
-    load();
-    var html='';
-    html+=row('金幣達人','每獲得 2,000,000 金幣：鑽石 ×2', state.goldGain, THRESH.goldGain, state.done.goldGain, '#2d7');
-    html+=row('礦藏大師','每獲得 40,000 強化石：鑽石 ×1', state.stoneGain, THRESH.stoneGain, state.done.stoneGain, '#2d7');
-    html+=row('豪擲千金','每消費 10,000 鑽石：鑽石 ×100', state.diamondSpend, THRESH.diamondSpend, state.done.diamondSpend, '#c85');
-    html+=row('狩獵連環','每擊殺 100 隻怪：強化石 ×100、鑽石 ×1', state.kills, THRESH.kills, state.done.kills, '#48c');
-    html+=row('持之以恆','每登入 7 天：鑽石 ×15、任務獎牌 ×2（每天最多 +1）', state.loginDaysAccum % THRESH.loginDays, THRESH.loginDays, state.done.login7, '#7a5');
-    html+=row('日常專家','每日任務累積 50 次（只計前四項）：鑽石 ×20', state.dailyCompletedAccum % THRESH.daily50, THRESH.daily50, state.done.daily50, '#a5a');
-    box.innerHTML=html;
+    state = load();
+    box.innerHTML = QUESTS.map(q=>{
+      var need=currentThresh(q),cur=state[q.kind],done=state.done[q.kind]||0;
+      return cardHTML(q,cur,need,done);
+    }).join('');
   }
 
   function onTabChange(){ if(QuestCore.getActiveTab()==='repeatables') render(); }
@@ -147,13 +165,7 @@
     document.addEventListener('quest:tabchange', onTabChange);
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
+
+  window.Repeat_exportState = function(){ return SaveHub.get(NS, defState()); };
+  window.Repeat_applyState = function(s){ if(s&&typeof s==='object') SaveHub.set(NS, normalize(s), {replace:true}); };
 })();
-// === Repeat Export / Import (for unified save) ===
-window.Repeat_exportState = function () {
-  return JSON.parse(JSON.stringify(state));
-};
-window.Repeat_applyState = function (s) {
-  if (!s || typeof s !== 'object') return;
-  state = Object.assign({}, state, s);
-  save();
-};

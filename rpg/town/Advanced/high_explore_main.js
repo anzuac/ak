@@ -116,7 +116,7 @@
   // 免費次數規則
   var FREE_INIT = 5;
   var FREE_MAX = 20;
-  var FREE_REFILL_SEC = 3600; // 每小時 +1
+  var FREE_REFILL_SEC = 36000; // 每小時 +1
 
   // ===== 讀取難度/獎勵（兼容欄位）=====
   function getDiffs(){

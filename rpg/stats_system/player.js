@@ -9,7 +9,7 @@
 // - ✅ init 時自動套用 JobPassiveAggregate.apply()
 // =======================
 
-const MAX_LEVEL = 200;
+const MAX_LEVEL = 250;
 
 // ===== 全域上限與職業特性參數（集中可調）=====
 
@@ -166,6 +166,9 @@ const player = {
         .reduce((sum, b) => sum + b[key], 0);
     return {
       bonusData,
+  
+get atkFlat() { return calc("atkFlat"); },
+get defFlat() { return calc("defFlat"); },
       get atkPercent()     { return calc("atk"); },
       get defPercent()     { return calc("def"); },
       get hpPercent()      { return calc("hp"); },
@@ -213,9 +216,9 @@ const player = {
   currentMP: 0,
 
   // —— 貨幣 ——
-  gold: 300,
-  gem: 300,
-  stone: 300,
+  gold: 3000,
+  gem: 1000,
+  stone: 3000,
 
   // —— 衍生計算暫存 ——
   spellDamageBonus: 0,
@@ -225,201 +228,214 @@ const player = {
   get expRateBonus() { return this.coreBonus.expBonus + this.skillBonus.expBonus; },
   get dropRateBonus() { return this.coreBonus.dropBonus + this.skillBonus.dropBonus; },
   get goldRateBonus() { return this.coreBonus.goldBonus + this.skillBonus.goldBonus; },
+get totalStats() {
+  // 1) 累計主屬（含核心）與元素裝備
+  const eqStr = this.coreBonus.str;
+  const eqAgi = this.coreBonus.agi;
+  const eqInt = this.coreBonus.int;
+  const eqLuk = this.coreBonus.luk;
 
-  get totalStats() {
-    // 1) 累計主屬（含核心）與元素裝備
-    const eqStr = this.coreBonus.str;
-    const eqAgi = this.coreBonus.agi;
-    const eqInt = this.coreBonus.int;
-    const eqLuk = this.coreBonus.luk;
+  const totalStr = this.baseStats.str + eqStr;
+  const totalAgi = this.baseStats.agi + eqAgi;
+  const totalInt = this.baseStats.int + eqInt;
+  const totalLuk = this.baseStats.luk + eqLuk;
 
-    const totalStr = this.baseStats.str + eqStr;
-    const totalAgi = this.baseStats.agi + eqAgi;
-    const totalInt = this.baseStats.int + eqInt;
-    const totalLuk = this.baseStats.luk + eqLuk;
+  // 2) 職業倍率
+  const jobKey  = (this.job ?? "").toLowerCase();
+  const baseJob = getBaseJobSafe(jobKey);
+  const jm = (typeof jobs !== "undefined" && jobs[jobKey]?.statMultipliers)
+    ? jobs[jobKey].statMultipliers
+    : { str: 1, agi: 1, int: 1, luck: 1 };
 
-    // 2) 職業倍率
-    const jobKey  = (this.job ?? "").toLowerCase();
-    const baseJob = getBaseJobSafe(jobKey);
-    const jm = (typeof jobs !== "undefined" && jobs[jobKey]?.statMultipliers)
-      ? jobs[jobKey].statMultipliers
-      : { str: 1, agi: 1, int: 1, luck: 1 };
+  // 3) 共用推導
+  const derived = deriveFromPrimariesTotals(
+    { str: totalStr, agi: totalAgi, int: totalInt, luck: totalLuk },
+    { str:(jm.str??1), agi:(jm.agi??1), int:(jm.int??1), luck:(jm.luck??1) }
+  );
 
-    // 3) 共用推導
-    const derived = deriveFromPrimariesTotals(
-      { str: totalStr, agi: totalAgi, int: totalInt, luck: totalLuk },
-      { str:(jm.str??1), agi:(jm.agi??1), int:(jm.int??1), luck:(jm.luck??1) }
-    );
+  // 爆擊率
+  const agiCritRateFromStat = totalAgi * (CRIT_FROM_AGI * (jm.agi ?? 1));
+  const baseRateNoAgi =
+    (this.critRate || 0) +
+    (this.skillBonus.critRate || 0) +
+    (this.coreBonus.critRate || 0);
 
-    // 爆擊率
-    const agiCritRateFromStat = totalAgi * (CRIT_FROM_AGI * (jm.agi ?? 1));
-    const baseRateNoAgi =
-      (this.critRate || 0) +
-      (this.skillBonus.critRate || 0) +
-      (this.coreBonus.critRate || 0);
+  const finalCritRateRaw = baseRateNoAgi + agiCritRateFromStat;
+  let finalCritRate = Math.min(1, finalCritRateRaw);
 
-    const finalCritRateRaw = baseRateNoAgi + agiCritRateFromStat;
-    let finalCritRate = Math.min(1, finalCritRateRaw);
+  // INT 轉法傷
+  this.spellDamageBonus = Math.floor(totalInt / 10) * 0.01;
 
-    // INT 轉法傷
-    this.spellDamageBonus = Math.floor(totalInt / 10) * 0.01;
+  // 四維 Base（尚未套技能固定值/百分比）
+  const atkBase =
+    this.baseStats.atk + this.coreBonus.atk +
+    derived.atk.str + derived.atk.agi + derived.atk.int + derived.atk.luck;
 
-    // 四維
-    const atkBase =
-      this.baseStats.atk + this.coreBonus.atk +
-      derived.atk.str + derived.atk.agi + derived.atk.int + derived.atk.luck;
+  const defBase =
+    this.baseStats.def + this.coreBonus.def +
+    derived.def.str + derived.def.agi + derived.def.int + derived.def.luck;
 
-    const defBase =
-      this.baseStats.def + this.coreBonus.def +
-      derived.def.str + derived.def.agi + derived.def.int + derived.def.luck;
+  const hpBase =
+    this.baseStats.hp + this.coreBonus.hp +
+    derived.hp.str + derived.hp.agi + derived.hp.int + derived.hp.luck;
 
-    const hpBase =
-      this.baseStats.hp + this.coreBonus.hp +
-      derived.hp.str + derived.hp.agi + derived.hp.int + derived.hp.luck;
+  const mpBase =
+    this.baseStats.mp + this.coreBonus.mp +
+    derived.mp.int;
 
-    const mpBase =
-      this.baseStats.mp + this.coreBonus.mp +
-      derived.mp.int;
+  // 技能傷害
+  const totalSkillDamage =
+    (this.baseSkillDamage || 0) +
+    (this.coreBonus.skillDamage || 0) +
+    (this.skillBonus.skillDamage || 0);
 
-    // 技能傷害
-    const totalSkillDamage =
-      (this.baseSkillDamage || 0) +
-      (this.coreBonus.skillDamage || 0) +
-      (this.skillBonus.skillDamage || 0);
+  // 盜賊/戰士被動（預設關）
+  const thiefDoubleHit = (baseJob === "thief")
+    ? Math.min(JOB_TRAIT_BASE.thief.maxDouble, totalLuk * JOB_TRAIT_BASE.thief.lukDouble)
+    : 0;
 
-    // 盜賊/戰士被動（預設關）
-    const thiefDoubleHit = (baseJob === "thief")
-      ? Math.min(JOB_TRAIT_BASE.thief.maxDouble, totalLuk * JOB_TRAIT_BASE.thief.lukDouble)
-      : 0;
-
-    let warriorDR = 0;
-    if (baseJob === "warrior") {
-      warriorDR = Math.min(JOB_TRAIT_BASE.warrior.maxDR, totalStr * JOB_TRAIT_BASE.warrior.strDR);
-    }
-
-    // 最終減傷（含 coreBonus.damageReduce）
-    let finalDamageReduce =
-      (Number(this.damageReduce) || 0) +
-      (Number(this.coreBonus.damageReduce) || 0) +
-      (Number(this.skillBonus.damageReduce) || 0) +
-      warriorDR;
-    finalDamageReduce = Math.min(finalDamageReduce, GLOBAL_CAPS.damageReduce);
-
-    // 穿防（遞減疊加）
-    const gatherPctFrom = (bonusData) =>
-      Object.values(bonusData || {})
-        .map(v => Number(v?.ignoreDefPct) || 0)
-        .filter(x => x > 0);
-
-    const pctSources = [
-      Number(this.baseIgnoreDefPct) || 0,
-      ...gatherPctFrom(this.coreBonus.bonusData),
-      ...gatherPctFrom(this.skillBonus.bonusData),
-      // ✅ 手動穿防若有，也可加：但目前沒手動欄位，先不加
-    ].filter(x => x > 0);
-
-    let combinedIgnoreDefPct = 0;
-    if (pctSources.length > 0) {
-      const product = pctSources.reduce((acc, p) => acc * (1 - Math.max(0, Math.min(p, 1))), 1);
-      combinedIgnoreDefPct = 1 - product;
-      combinedIgnoreDefPct = Math.min(Math.max(combinedIgnoreDefPct, 0), GLOBAL_CAPS.ignoreDefPct);
-    }
-
-    // 盜賊連擊（相容舊 UI：讓 comboRate 顯示 doubleHit）
-    const comboRateEff =
-      (Number(this.comboRate) || 0) +
-      (Number(this.coreBonus.comboRate) || 0) +
-      (Number(this.skillBonus.comboRate) || 0) +
-      thiefDoubleHit;
-
-    const doubleHitChanceEff = Math.min(1,
-      (Number(this.doubleHitChance) || 0) +
-      (Number(this.coreBonus.doubleHitChance) || 0) +
-      (Number(this.skillBonus.doubleHitChance) || 0) +
-      thiefDoubleHit
-    );
-
-    // === 先手再動 Preemptive（聚合 + 上限 + 預設值 + 職業限定）===
-    const isArcher = (baseJob === "archer");
-
-    // ✅ 改為「所有來源加總」：core + skill + manual
-    let rawPreemptChance =
-      (Number(this.coreBonus.preemptiveChance) || 0) +
-      (Number(this.skillBonus.preemptiveChance) || 0) +
-      (Number(this.preemptiveChance) || 0);
-
-    let rawPreemptMax =
-      (Number(this.coreBonus.preemptivePerAttackMax) || 0) +
-      (Number(this.skillBonus.preemptivePerAttackMax) || 0) +
-      (Number(this.preemptivePerAttackMax) || 0);
-
-    // 非弓箭手：關閉
-    let preemptiveEnabled = !!isArcher;
-
-    // 機率（先套 cap）
-    let preemptiveChance = preemptiveEnabled
-      ? Math.max(0, Math.min(rawPreemptChance, GLOBAL_CAPS.preemptiveChance))
-      : 0;
-
-    // 上限：預設 + 全來源加成（不覆蓋），再套 cap
-    const basePreemptMax = Number(GLOBAL_DEFAULTS.preemptivePerAttackMax) || 0;
-    let preemptivePerAttackMax = preemptiveEnabled
-      ? Math.max(0, Math.min(basePreemptMax + rawPreemptMax, GLOBAL_CAPS.preemptivePerAttackMax))
-      : 0;
-
-    return {
-      atk: Math.floor(atkBase * (1 + this.skillBonus.atkPercent)),
-      def: Math.floor(defBase * (1 + this.skillBonus.defPercent)),
-      hp:  Math.floor(hpBase  * (1 + this.skillBonus.hpPercent)),
-      mp:  Math.floor(mpBase  * (1 + this.skillBonus.mpPercent)),
-      shield: this.skillBonus.shield,
-
-      recoverPercent:
-        (Number(this.recoverPercentBaseDecimal ?? this.recoverPercent) || 0) +
-        (Number(this.skillBonus.recoverPercent) || 0) +
-        (Number(this.coreBonus.recoverPercent) || 0),
-
-      dodgePercent: (Number(this.dodgePercent) || 0) +
-                    (Number(this.skillBonus.dodgePercent) || 0) +
-                    (Number(this.coreBonus.dodgePercent) || 0),
-
-      critRate:       Math.max(0, Math.min(1, finalCritRate)),
-      // 不再添加爆率溢出轉爆傷
-      critMultiplier: (Number(this.critMultiplier) || 0) +
-                      (Number(this.skillBonus.critMultiplier) || 0) +
-                      (Number(this.coreBonus.critMultiplier) || 0),
-
-      attackSpeedPct: (
-        (Number(this.attackSpeedPctBase) || 0) +
-        (Number(this.coreBonus.attackSpeedPct) || 0) +
-        (Number(this.skillBonus.attackSpeedPct) || 0)
-      ),
-
-      damageReduce: finalDamageReduce,
-
-      spellDamage: (Number(this.spellDamageBonus)||0) + (Number(this.skillBonus.spellDamage) || 0),
-      skillDamage: totalSkillDamage,
-
-      // 總傷害（base + core + skill）
-      totalDamage: (
-        (Number(this.baseTotalDamage) || 0) +
-        (Number(this.coreBonus.totalDamage) || 0) +
-        (Number(this.skillBonus.totalDamage) || 0)
-      ),
-
-      // 穿防（遞減合成後百分比）
-      ignoreDefPct:  combinedIgnoreDefPct,
-
-      // 連擊顯示/戰鬥（相容：主頁讀 comboRate 也會看到雙擊）
-      comboRate: doubleHitChanceEff,
-      doubleHitChance: doubleHitChanceEff,
-
-      // ✅ 先手再動（主頁/戰鬥可讀）
-      preemptiveEnabled: preemptiveEnabled,           // 非弓箭手為 false
-      preemptiveChance: preemptiveChance,             // 0~GLOBAL_CAPS.preemptiveChance
-      preemptivePerAttackMax: preemptivePerAttackMax  // 0~GLOBAL_CAPS.preemptivePerAttackMax；弓箭手預設 1
-    };
+  let warriorDR = 0;
+  if (baseJob === "warrior") {
+    warriorDR = Math.min(JOB_TRAIT_BASE.warrior.maxDR, totalStr * JOB_TRAIT_BASE.warrior.strDR);
   }
+
+  // 最終減傷（含 coreBonus.damageReduce）
+  let finalDamageReduce =
+    (Number(this.damageReduce) || 0) +
+    (Number(this.coreBonus.damageReduce) || 0) +
+    (Number(this.skillBonus.damageReduce) || 0) +
+    warriorDR;
+  finalDamageReduce = Math.min(finalDamageReduce, GLOBAL_CAPS.damageReduce);
+
+  // 穿防（遞減疊加）
+  const gatherPctFrom = (bonusData) =>
+    Object.values(bonusData || {})
+      .map(v => Number(v?.ignoreDefPct) || 0)
+      .filter(x => x > 0);
+
+  const pctSources = [
+    Number(this.baseIgnoreDefPct) || 0,
+    ...gatherPctFrom(this.coreBonus.bonusData),
+    ...gatherPctFrom(this.skillBonus.bonusData),
+  ].filter(x => x > 0);
+
+  let combinedIgnoreDefPct = 0;
+  if (pctSources.length > 0) {
+    const product = pctSources.reduce((acc, p) => acc * (1 - Math.max(0, Math.min(p, 1))), 1);
+    combinedIgnoreDefPct = 1 - product;
+    combinedIgnoreDefPct = Math.min(Math.max(combinedIgnoreDefPct, 0), GLOBAL_CAPS.ignoreDefPct);
+  }
+
+  // 盜賊連擊（相容舊 UI：讓 comboRate 顯示 doubleHit）
+  const comboRateEff =
+    (Number(this.comboRate) || 0) +
+    (Number(this.coreBonus.comboRate) || 0) +
+    (Number(this.skillBonus.comboRate) || 0) +
+    thiefDoubleHit;
+
+  const doubleHitChanceEff = Math.min(1,
+    (Number(this.doubleHitChance) || 0) +
+    (Number(this.coreBonus.doubleHitChance) || 0) +
+    (Number(this.skillBonus.doubleHitChance) || 0) +
+    thiefDoubleHit
+  );
+
+  // === 先手再動 Preemptive（聚合 + 上限 + 預設值 + 職業限定）===
+  const isArcher = (baseJob === "archer");
+
+  // ✅ 改為「所有來源加總」：core + skill + manual
+  let rawPreemptChance =
+    (Number(this.coreBonus.preemptiveChance) || 0) +
+    (Number(this.skillBonus.preemptiveChance) || 0) +
+    (Number(this.preemptiveChance) || 0);
+
+  let rawPreemptMax =
+    (Number(this.coreBonus.preemptivePerAttackMax) || 0) +
+    (Number(this.skillBonus.preemptivePerAttackMax) || 0) +
+    (Number(this.preemptivePerAttackMax) || 0);
+
+  // 非弓箭手：關閉
+  let preemptiveEnabled = !!isArcher;
+
+  // 機率（先套 cap）
+  let preemptiveChance = preemptiveEnabled
+    ? Math.max(0, Math.min(rawPreemptChance, GLOBAL_CAPS.preemptiveChance))
+    : 0;
+
+  // 上限：預設 + 全來源加成（不覆蓋），再套 cap
+  const basePreemptMax = Number(GLOBAL_DEFAULTS.preemptivePerAttackMax) || 0;
+  let preemptivePerAttackMax = preemptiveEnabled
+    ? Math.max(0, Math.min(basePreemptMax + rawPreemptMax, GLOBAL_CAPS.preemptivePerAttackMax))
+    : 0;
+
+  // ===== 技能固定值 / 百分比（⚠️ 百分比需 /100）=====
+  const atkFlatFromSkill = Number(this.skillBonus.atkFlat || 0);
+  const defFlatFromSkill = Number(this.skillBonus.defFlat || 0);
+
+  const atkPctFromSkill = (Number(this.skillBonus.atkPercent) || 0) / 100;
+  const defPctFromSkill = (Number(this.skillBonus.defPercent) || 0) / 100;
+  const hpPctFromSkill  = (Number(this.skillBonus.hpPercent)  || 0) / 100;
+  const mpPctFromSkill  = (Number(this.skillBonus.mpPercent)  || 0) / 100;
+
+  // 最終四維（順序：Base → +固定值 → *百分比）
+  const finalAtk = Math.floor((atkBase + atkFlatFromSkill) * (1 + atkPctFromSkill));
+  const finalDef = Math.floor((defBase + defFlatFromSkill) * (1 + defPctFromSkill));
+  const finalHP  = Math.floor(hpBase  * (1 + hpPctFromSkill));
+  const finalMP  = Math.floor(mpBase  * (1 + mpPctFromSkill));
+
+  return {
+    atk: finalAtk,
+    def: finalDef,
+    hp:  finalHP,
+    mp:  finalMP,
+    shield: this.skillBonus.shield,
+
+    recoverPercent:
+      (Number(this.recoverPercentBaseDecimal ?? this.recoverPercent) || 0) +
+      (Number(this.skillBonus.recoverPercent) || 0) +
+      (Number(this.coreBonus.recoverPercent) || 0),
+
+    dodgePercent: (Number(this.dodgePercent) || 0) +
+                  (Number(this.skillBonus.dodgePercent) || 0) +
+                  (Number(this.coreBonus.dodgePercent) || 0),
+
+    critRate:       Math.max(0, Math.min(1, finalCritRate)),
+    // 不再添加爆率溢出轉爆傷
+    critMultiplier: (Number(this.critMultiplier) || 0) +
+                    (Number(this.skillBonus.critMultiplier) || 0) +
+                    (Number(this.coreBonus.critMultiplier) || 0),
+
+    attackSpeedPct: (
+      (Number(this.attackSpeedPctBase) || 0) +
+      (Number(this.coreBonus.attackSpeedPct) || 0) +
+      (Number(this.skillBonus.attackSpeedPct) || 0)
+    ),
+
+    damageReduce: finalDamageReduce,
+
+    spellDamage: (Number(this.spellDamageBonus)||0) + (Number(this.skillBonus.spellDamage) || 0),
+    skillDamage: totalSkillDamage,
+
+    // 總傷害（base + core + skill）
+    totalDamage: (
+      (Number(this.baseTotalDamage) || 0) +
+      (Number(this.coreBonus.totalDamage) || 0) +
+      (Number(this.skillBonus.totalDamage) || 0)
+    ),
+
+    // 穿防（遞減合成後百分比）
+    ignoreDefPct:  combinedIgnoreDefPct,
+
+    // 連擊顯示/戰鬥（相容：主頁讀 comboRate 也會看到雙擊）
+    comboRate: doubleHitChanceEff,
+    doubleHitChance: doubleHitChanceEff,
+
+    // ✅ 先手再動（主頁/戰鬥可讀）
+    preemptiveEnabled: preemptiveEnabled,
+    preemptiveChance: preemptiveChance,
+    preemptivePerAttackMax: preemptivePerAttackMax
+  };
+}
 };
 
 // ===== 魔盾（法師專屬）=====
@@ -578,6 +594,8 @@ function initPlayer() {
   if (typeof updateResourceUI === "function") updateResourceUI?.();
   if (typeof refreshMageOnlyUI === "function") refreshMageOnlyUI?.();
   if (typeof ensureSkillEvolution === "function") ensureSkillEvolution?.();
+  // 讓 Skills Hub 可以用 window.skillBonus（避免載入順序問題）
+window.skillBonus = player.skillBonus;
 }
 
 // 啟動
