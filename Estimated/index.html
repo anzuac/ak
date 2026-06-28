@@ -19,7 +19,7 @@
       </section>
       <section class="hero-meta" aria-label="系統狀態">
         <span class="pill">Dark Mode</span>
-        <span class="pill" id="storageModeBadge">儲存方式</span>
+        <span class="pill" id="storageModeBadge">瀏覽器儲存</span>
         <span class="pill" id="deviceMode">Responsive</span>
       </section>
     </header>
@@ -89,7 +89,7 @@
 
         <div class="action-row goal-action-row">
           <p class="autosave-status" id="goalSaveStatus">目標設定會自動儲存</p>
-          <button class="secondary-button" type="button" id="changeStorageButton">儲存方式</button>
+          <button class="secondary-button" type="button" id="changeStorageButton">儲存說明</button>
           <button class="secondary-button" type="button" id="exportBackupButton">匯出備份</button>
           <button class="secondary-button" type="button" id="importBackupButton">匯入備份</button>
           <input id="importBackupInput" type="file" accept="application/json,.json" hidden />
@@ -343,34 +343,6 @@
     </tr>
   </template>
 
-
-  <section id="storageChoiceModal" class="storage-modal" role="dialog" aria-modal="true" aria-labelledby="storageChoiceTitle" hidden>
-    <div class="storage-modal-card glass-panel">
-      <button class="storage-modal-close" type="button" id="storageModalCloseButton" aria-label="關閉儲存方式選擇">×</button>
-      <p class="eyebrow">STORAGE</p>
-      <h2 id="storageChoiceTitle">選擇資料儲存方式</h2>
-      <p class="muted-text">資料只會保存在你的裝置，不會上傳。瀏覽器快取會永遠保留一份；若選擇本機 JSON，之後新增紀錄與目標設定也會自動同步寫入該檔案。</p>
-
-      <div class="storage-choice-grid">
-        <button class="storage-choice-button" type="button" id="useBrowserStorageButton">
-          <strong>使用瀏覽器儲存</strong>
-          <span>推薦。手機與電腦都能用，資料存在目前瀏覽器快取。</span>
-        </button>
-
-        <button class="storage-choice-button" type="button" id="createFileStorageButton">
-          <strong>建立本機 JSON 存檔</strong>
-          <span>由你選擇檔案位置；之後輸入資料會自動寫入 JSON，同時保留瀏覽器快取。</span>
-        </button>
-
-        <button class="storage-choice-button" type="button" id="openFileStorageButton">
-          <strong>讀取既有 JSON 存檔</strong>
-          <span>重新授權或連結之前建立的 level-tracker-save.json。</span>
-        </button>
-      </div>
-
-      <p class="storage-note">本機 JSON 檔案儲存需要 Chrome / Edge 桌面版，並透過 localhost 或 HTTPS 開啟。若權限失效，系統會先使用瀏覽器快取，並在需要時請你重新授權或讀取 JSON。</p>
-    </div>
-  </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

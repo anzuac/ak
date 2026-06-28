@@ -4,11 +4,10 @@ import { render, renderDeviceMode } from './render.js';
 import { showToast } from './toast.js';
 import { addRecord, clearRecords, createDefaultGoal, getState, removeRecord, resetState, setGoal, setState } from '../domain/state.js';
 import { calculateSummary, getBurningModeLabel, isValidExpBasisPoints, isValidLevel, parsePercentToBasisPoints, toTotalExp, validateRecordProgress } from '../domain/calculator.js';
-import { clearStorage, createFileStorage, exportStateAsJson, getStorageInfo, importStateFromJsonFile, isFileSystemStorageSupported, openFileStorage, saveStateToStorage, useBrowserStorage } from '../services/storageService.js';
+import { clearStorage, exportStateAsJson, getStorageInfo, importStateFromJsonFile, saveStateToStorage } from '../services/storageService.js';
 import { formatPercentInput } from '../utils/format.js';
 
 let goalAutoSaveTimer = 0;
-let lastStorageWarning = "";
 
 export function registerEvents() {
   elements.goalForm.addEventListener('submit', event => {
@@ -26,11 +25,7 @@ export function registerEvents() {
   elements.clearRecordsButton.addEventListener('click', handleClearRecords);
   elements.resetAllButton.addEventListener('click', handleResetAll);
   elements.fillDefaultGoalButton.addEventListener('click', handleFillDefaultGoal);
-  elements.changeStorageButton.addEventListener('click', () => showStorageChoiceModal());
-  elements.storageModalCloseButton.addEventListener('click', hideStorageChoiceModal);
-  elements.useBrowserStorageButton.addEventListener('click', handleUseBrowserStorage);
-  elements.createFileStorageButton.addEventListener('click', handleCreateFileStorage);
-  elements.openFileStorageButton.addEventListener('click', handleOpenFileStorage);
+  elements.changeStorageButton.addEventListener('click', handleStorageInfo);
   elements.exportBackupButton.addEventListener('click', handleExportBackup);
   elements.importBackupButton.addEventListener('click', () => elements.importBackupInput.click());
   elements.importBackupInput.addEventListener('change', handleImportBackup);
@@ -385,81 +380,24 @@ async function persistAndRender(message) {
   updateStorageStatus();
 }
 
-export function showStorageChoiceModal({ force = false } = {}) {
-  if (!elements.storageChoiceModal) return;
-
-  elements.storageChoiceModal.hidden = false;
-  elements.storageChoiceModal.dataset.force = String(force);
-  elements.storageModalCloseButton.hidden = force;
-  updateStorageStatus();
-}
-
-function hideStorageChoiceModal() {
-  if (!elements.storageChoiceModal) return;
-  if (elements.storageChoiceModal.dataset.force === 'true') return;
-  elements.storageChoiceModal.hidden = true;
+function handleStorageInfo() {
+  const info = getStorageInfo();
+  showToast(`瀏覽器自動儲存中，目前約 ${formatStorageSize(info.bytes)}。可用「匯出備份」下載 JSON 保險。`);
 }
 
 export function updateStorageStatus() {
   if (!elements.storageModeBadge) return;
 
   const info = getStorageInfo();
-
-  if (info.mode === 'file') {
-    elements.storageModeBadge.textContent = `本機 JSON：${info.fileName || '已連結'}`;
-    elements.storageModeBadge.title = '資料會同時保存到瀏覽器快取與你選擇的本機 JSON 檔案';
-  } else if (info.reconnectRequired && info.preferredMode === 'file') {
-    elements.storageModeBadge.textContent = `本機 JSON 待授權${info.fileName ? `：${info.fileName}` : ''}`;
-    elements.storageModeBadge.title = info.warning || '目前先使用瀏覽器快取；點儲存方式可重新授權或讀取 JSON';
-  } else {
-    elements.storageModeBadge.textContent = '瀏覽器儲存';
-    elements.storageModeBadge.title = info.warning || '資料保存在目前瀏覽器 localStorage';
-  }
-
-  if (info.warning && info.warning !== lastStorageWarning) {
-    lastStorageWarning = info.warning;
-    showToast(info.warning);
-  }
-
-  if (elements.createFileStorageButton) {
-    elements.createFileStorageButton.disabled = !isFileSystemStorageSupported();
-    elements.openFileStorageButton.disabled = !isFileSystemStorageSupported();
-  }
+  elements.storageModeBadge.textContent = `瀏覽器儲存 · ${formatStorageSize(info.bytes)}`;
+  elements.storageModeBadge.title = '資料自動保存在目前瀏覽器。需要保險時請使用「匯出備份」，可再用「匯入備份」還原。';
 }
 
-async function handleUseBrowserStorage() {
-  await runStorageAction(async () => {
-    await useBrowserStorage(getState());
-    hideStorageChoiceModalAfterSelection();
-    showToast('已使用瀏覽器儲存');
-  });
-}
-
-async function handleCreateFileStorage() {
-  await runStorageAction(async () => {
-    await createFileStorage(getState());
-    hideStorageChoiceModalAfterSelection();
-    showToast('已建立並連結本機 JSON 存檔');
-  });
-}
-
-async function handleOpenFileStorage() {
-  await runStorageAction(async () => {
-    const importedState = await openFileStorage(getState());
-
-    if (importedState) {
-      setState(importedState);
-      const state = getState();
-      fillGoalForm(state.goal ?? createDefaultGoal());
-      resetRecordForm();
-      render(state);
-    } else {
-      await saveStateToStorage(getState());
-    }
-
-    hideStorageChoiceModalAfterSelection();
-    showToast(importedState ? '已讀取本機 JSON 存檔' : '已連結空白 JSON 存檔並寫入目前資料');
-  });
+function formatStorageSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 async function handleExportBackup() {
@@ -497,11 +435,4 @@ async function runStorageAction(action) {
     console.error(error);
     showToast(error?.message || '儲存操作失敗');
   }
-}
-
-function hideStorageChoiceModalAfterSelection() {
-  if (!elements.storageChoiceModal) return;
-  elements.storageChoiceModal.dataset.force = 'false';
-  elements.storageChoiceModal.hidden = true;
-  elements.storageModalCloseButton.hidden = false;
 }
