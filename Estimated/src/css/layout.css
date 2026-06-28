@@ -1,0 +1,101 @@
+.app-shell {
+  width: min(100% - 36px, var(--max-width));
+  margin: 0 auto;
+  padding: 28px 0 44px;
+}
+
+.glass-panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--blur);
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  margin-bottom: 20px;
+}
+
+.hero h1 {
+  margin-top: 8px;
+  font-size: clamp(2rem, 5vw, 4.25rem);
+  letter-spacing: -0.05em;
+  line-height: 0.96;
+}
+
+.hero-text {
+  width: min(780px, 100%);
+  margin-top: 16px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 250px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.panel-card,
+.records-panel {
+  border-radius: var(--radius-xl);
+  padding: 22px;
+}
+
+.panel-title-row,
+.record-header-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.panel-title-row h2 {
+  margin-top: 6px;
+  font-size: 1.35rem;
+}
+
+.form-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.two-cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.records-panel {
+  margin-top: 18px;
+}

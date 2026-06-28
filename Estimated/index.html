@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>練等進度紀錄 ES2022</title>
+  <link rel="stylesheet" href="./src/css/base.css" />
+  <link rel="stylesheet" href="./src/css/layout.css" />
+  <link rel="stylesheet" href="./src/css/components.css" />
+  <link rel="stylesheet" href="./src/css/responsive.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="hero glass-panel">
+      <section>
+        <p class="eyebrow">LEVEL TRACKER · ES2022</p>
+        <h1>練等進度紀錄</h1>
+        <p class="hero-text">玩家先設定起始等級、起始百分比、目標等級與燃燒規則；系統會依選擇的規則換算真實 EXP 與完成時間。</p>
+      </section>
+      <section class="hero-meta" aria-label="系統狀態">
+        <span class="pill">Dark Mode</span>
+        <span class="pill" id="storageModeBadge">儲存方式</span>
+        <span class="pill" id="deviceMode">Responsive</span>
+      </section>
+    </header>
+
+    <section class="workspace">
+      <form class="glass-panel panel-card" id="goalForm" autocomplete="off">
+        <div class="panel-title-row">
+          <div>
+            <p class="eyebrow">SETUP</p>
+            <h2>目標設定</h2>
+          </div>
+          <button class="ghost-button" type="button" id="fillDefaultGoalButton">預設 260 → 300</button>
+        </div>
+
+        <div class="form-grid two-cols">
+          <label class="field">
+            <span>初始等級</span>
+            <input id="startLevel" type="number" inputmode="numeric" min="260" max="300" value="260" required />
+            <small>依下方燃燒規則限制可輸入等級；無燃燒時 260～300 每等皆可。</small>
+          </label>
+
+          <label class="field">
+            <span>初始經驗</span>
+            <div class="percent-input">
+              <input id="startExp" type="text" inputmode="decimal" pattern="^100(?:\.0{0,3})?$|^\d{1,2}(?:\.\d{0,3})?$" value="0" placeholder="0～100.000" required />
+              <span aria-hidden="true">%</span>
+            </div>
+            <small>只輸入 0～100，最多小數點第三位，系統自動視為百分比。</small>
+          </label>
+
+          <label class="field">
+            <span>目標等級</span>
+            <input id="targetLevel" type="number" inputmode="numeric" min="260" max="300" value="300" required />
+            <small>目標固定計算到該等級 0.000%；會依燃燒規則計算有效等級。</small>
+          </label>
+
+          <fieldset class="field full-width choice-field">
+            <legend>燃燒規則</legend>
+            <div class="choice-grid" role="radiogroup" aria-label="燃燒規則">
+              <label class="choice-card">
+                <input type="radio" name="burningMode" value="none" />
+                <span>無燃燒</span>
+              </label>
+              <label class="choice-card">
+                <input type="radio" name="burningMode" value="burn270" checked />
+                <span>燃燒 1+1（270）</span>
+              </label>
+              <label class="choice-card">
+                <input type="radio" name="burningMode" value="burn280" />
+                <span>燃燒 1+1（280）</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="field">
+            <span>目標結束時間</span>
+            <input id="targetTime" type="datetime-local" required />
+            <small>預設為今年 10/20 23:59；如果已過期，會自動使用明年。</small>
+          </label>
+
+          <label class="field">
+            <span>預設每日練等小時</span>
+            <input id="dailyTrainingHours" type="number" inputmode="decimal" min="0.1" max="24" step="0.1" value="2" required />
+            <small>尚無紀錄時使用；開始新增練等紀錄後，系統會改用實際每日平均。</small>
+          </label>
+        </div>
+
+        <div class="action-row goal-action-row">
+          <p class="autosave-status" id="goalSaveStatus">目標設定會自動儲存</p>
+          <button class="secondary-button" type="button" id="changeStorageButton">儲存方式</button>
+          <button class="secondary-button" type="button" id="exportBackupButton">匯出備份</button>
+          <button class="secondary-button" type="button" id="importBackupButton">匯入備份</button>
+          <input id="importBackupInput" type="file" accept="application/json,.json" hidden />
+          <button class="secondary-button" type="button" id="clearRecordsButton">清除紀錄</button>
+          <button class="danger-button" type="button" id="resetAllButton">重置全部</button>
+        </div>
+      </form>
+
+      <form class="glass-panel panel-card" id="recordForm" autocomplete="off">
+        <div class="panel-title-row">
+          <div>
+            <p class="eyebrow">DAILY RECORD</p>
+            <h2>新增每日紀錄</h2>
+          </div>
+          <button class="ghost-button" type="button" id="clearRecordFormButton">清空輸入</button>
+        </div>
+
+        <div class="form-grid two-cols">
+          <label class="field">
+            <span>日期</span>
+            <input id="recordDate" type="date" required />
+          </label>
+
+          <label class="field">
+            <span>結束等級</span>
+            <input id="endLevel" type="number" inputmode="numeric" min="260" max="300" required />
+            <small>請依目標設定中的燃燒規則輸入有效等級；燃燒上限前只允許有效跳等路線。</small>
+          </label>
+
+          <label class="field">
+            <span>結束經驗</span>
+            <div class="percent-input">
+              <input id="endExp" type="text" inputmode="decimal" pattern="^100(?:\.0{0,3})?$|^\d{1,2}(?:\.\d{0,3})?$" placeholder="0～100.000" required />
+              <span aria-hidden="true">%</span>
+            </div>
+            <small>不用輸入 % 符號，最多小數點第三位；100 會依目前燃燒規則視為下一個有效等級 0.000%。</small>
+          </label>
+
+          <label class="field">
+            <span>練等分鐘</span>
+            <input id="minutes" type="number" inputmode="numeric" min="0" step="1" required />
+          </label>
+
+          <p class="form-hint full-width">練等分鐘輸入 0 代表活動、任務、道具等其他渠道；會記錄成長，但不納入平均練等效率。</p>
+
+          <label class="field full-width">
+            <span>備註</span>
+            <input id="note" type="text" maxlength="80" placeholder="例如：每日、活動、刷圖、秘藥、燃燒" />
+          </label>
+        </div>
+
+        <div class="action-row">
+          <button class="primary-button" type="submit">新增紀錄</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="stat-grid" aria-label="進度統計">
+      <article class="stat-card highlight-card">
+        <span>目前進度</span>
+        <strong id="currentProgress">-</strong>
+        <small id="currentTotalExp">-</small>
+      </article>
+
+      <article class="stat-card">
+        <span>距離目標</span>
+        <strong id="remainingExp">-</strong>
+        <small>以實際 EXP 計算</small>
+      </article>
+
+      <article class="stat-card progress-card">
+        <span>完成比例</span>
+        <strong id="completeRate">-</strong>
+        <div class="progress-track" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div>
+      </article>
+
+      <article class="stat-card">
+        <span>累積時間</span>
+        <strong id="totalMinutes">-</strong>
+        <small id="recordCount">-</small>
+      </article>
+
+      <article class="stat-card">
+        <span>平均效率</span>
+        <strong id="avgPerHour">-</strong>
+        <small>EXP / 小時</small>
+      </article>
+
+      <article class="stat-card">
+        <span>每日平均練等</span>
+        <strong id="averageDailyHours">-</strong>
+        <small id="averageDailyHourStatus">尚無紀錄時使用預設值</small>
+      </article>
+
+      <article class="stat-card">
+        <span>剩餘需練時數</span>
+        <strong id="estimateTime">-</strong>
+        <small>純練等時數，只顯示小時，不換算成天數</small>
+      </article>
+
+      <article class="stat-card projected-card">
+        <span>預估完成日</span>
+        <strong id="projectedFinishDate">-</strong>
+        <small id="projectedFinishStatus">依每日平均練等時間推算，超過目標時間會以警告顯示</small>
+      </article>
+
+      <article class="stat-card projected-card">
+        <span>總 EXP 預估完成</span>
+        <strong id="totalExpProjectedFinishDate">-</strong>
+        <small id="totalExpProjectedFinishStatus">依每日總獲得 EXP 推算，包含練等與其他渠道</small>
+      </article>
+
+      <article class="stat-card">
+        <span>目標每日 EXP</span>
+        <strong id="requiredSpeed">-</strong>
+        <small id="speedStatus">-</small>
+      </article>
+
+      <article class="stat-card">
+        <span>依目前效率每日需練</span>
+        <strong id="requiredDailyHours">-</strong>
+        <small id="dailyHourStatus">用目前平均 EXP / 小時計算</small>
+      </article>
+    </section>
+
+    <section class="glass-panel records-panel">
+      <div class="panel-title-row record-header-row">
+        <div>
+          <p class="eyebrow">HISTORY</p>
+          <h2>每日紀錄</h2>
+        </div>
+        <p class="muted-text">同一天可以輸入多筆，列表會自動彙整成每日一筆；點「詳細」可查看當日所有明細。</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>結束等級</th>
+              <th>結束經驗</th>
+              <th>本日總獲得</th>
+              <th>練等分鐘</th>
+              <th>練等效率</th>
+              <th>本等換算 %/hr</th>
+              <th>備註</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="recordList"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <template id="emptyRecordTemplate">
+    <tr>
+      <td colspan="9" class="empty-cell">尚無紀錄，先儲存目標後新增每日練等資料。</td>
+    </tr>
+  </template>
+
+  <template id="recordRowTemplate">
+    <tr class="record-row">
+      <td data-cell="date"></td>
+      <td data-cell="endLevel"></td>
+      <td data-cell="endExp"></td>
+      <td class="compact-exp-cell" data-cell="gainedExp"></td>
+      <td data-cell="minutes"></td>
+      <td class="compact-exp-cell" data-cell="expPerHour"></td>
+      <td data-cell="percentPerHour"></td>
+      <td data-cell="note"></td>
+      <td>
+        <div class="record-actions">
+          <button class="mini-secondary-button" type="button" data-action="toggle-details" aria-expanded="false">詳細</button>
+          <button class="mini-danger-button" type="button" data-action="delete-day">刪除當日</button>
+        </div>
+      </td>
+    </tr>
+  </template>
+
+  <template id="recordDetailTemplate">
+    <tr class="record-detail-row" hidden>
+      <td colspan="9">
+        <section class="record-detail-card" data-detail-card>
+          <div class="detail-title-row">
+            <strong>當日詳細資訊</strong>
+            <span>完整 EXP 與當日明細只在這裡展開</span>
+          </div>
+          <dl class="detail-grid">
+            <div>
+              <dt>當日開始累積 EXP</dt>
+              <dd data-detail="previousTotal"></dd>
+            </div>
+            <div>
+              <dt>當日結束累積 EXP</dt>
+              <dd data-detail="currentTotal"></dd>
+            </div>
+            <div>
+              <dt>本日總獲得完整 EXP</dt>
+              <dd data-detail="gainedExpFull"></dd>
+            </div>
+            <div>
+              <dt>納入效率 EXP</dt>
+              <dd data-detail="trainingGainedFull"></dd>
+            </div>
+            <div>
+              <dt>其他渠道 EXP</dt>
+              <dd data-detail="otherGainedFull"></dd>
+            </div>
+            <div>
+              <dt>本日練等每小時完整 EXP</dt>
+              <dd data-detail="expPerHourFull"></dd>
+            </div>
+            <div>
+              <dt>結束等級升級需求</dt>
+              <dd data-detail="currentNeed"></dd>
+            </div>
+            <div>
+              <dt>本日換算效率</dt>
+              <dd data-detail="percentPerHourFull"></dd>
+            </div>
+            <div class="detail-wide">
+              <dt>備註彙整</dt>
+              <dd data-detail="noteFull"></dd>
+            </div>
+          </dl>
+
+          <section class="daily-entry-section" aria-label="當日明細">
+            <div class="detail-title-row daily-entry-title">
+              <strong>當日明細</strong>
+              <span>每日列表會彙總，這裡保留每次輸入的原始紀錄。</span>
+            </div>
+            <div class="daily-entry-table-wrap">
+              <table class="daily-entry-table">
+                <thead>
+                  <tr>
+                    <th>結束進度</th>
+                    <th>本筆獲得</th>
+                    <th>分鐘</th>
+                    <th>效率計算</th>
+                    <th>備註</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody data-detail="entryList"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </td>
+    </tr>
+  </template>
+
+
+  <section id="storageChoiceModal" class="storage-modal" role="dialog" aria-modal="true" aria-labelledby="storageChoiceTitle" hidden>
+    <div class="storage-modal-card glass-panel">
+      <button class="storage-modal-close" type="button" id="storageModalCloseButton" aria-label="關閉儲存方式選擇">×</button>
+      <p class="eyebrow">STORAGE</p>
+      <h2 id="storageChoiceTitle">選擇資料儲存方式</h2>
+      <p class="muted-text">資料只會保存在你的裝置，不會上傳。大多數玩家使用瀏覽器儲存即可；想自行管理存檔檔案時，可選擇本機 JSON。</p>
+
+      <div class="storage-choice-grid">
+        <button class="storage-choice-button" type="button" id="useBrowserStorageButton">
+          <strong>使用瀏覽器儲存</strong>
+          <span>推薦。手機與電腦都能用，資料存在目前瀏覽器。</span>
+        </button>
+
+        <button class="storage-choice-button" type="button" id="createFileStorageButton">
+          <strong>建立本機 JSON 存檔</strong>
+          <span>由你選擇檔案位置，之後資料寫入該 JSON 檔。</span>
+        </button>
+
+        <button class="storage-choice-button" type="button" id="openFileStorageButton">
+          <strong>讀取既有 JSON 存檔</strong>
+          <span>連結之前建立的 level-tracker-save.json。</span>
+        </button>
+      </div>
+
+      <p class="storage-note">本機 JSON 檔案儲存需要 Chrome / Edge 桌面版，並透過 localhost 或 HTTPS 開啟；不支援時仍可使用瀏覽器儲存與匯出 / 匯入備份。</p>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="./src/js/main.js"></script>
+</body>
+</html>
