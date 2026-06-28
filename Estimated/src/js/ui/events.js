@@ -2,7 +2,7 @@ import { elements } from './dom.js';
 import { fillGoalForm, readGoalForm, readRecordForm, resetRecordForm } from './forms.js';
 import { render, renderDeviceMode } from './render.js';
 import { showToast } from './toast.js';
-import { addRecord, clearRecords, createDefaultGoal, getState, removeRecord, resetState, setGoal } from '../domain/state.js';
+import { addRecord, clearRecords, createDefaultGoal, getState, removeRecord, resetState, setGoal, setState } from '../domain/state.js';
 import { calculateSummary, getBurningModeLabel, isValidExpBasisPoints, isValidLevel, parsePercentToBasisPoints, toTotalExp, validateRecordProgress } from '../domain/calculator.js';
 import { clearStorage, createFileStorage, exportStateAsJson, getStorageInfo, importStateFromJsonFile, isFileSystemStorageSupported, openFileStorage, saveStateToStorage, useBrowserStorage } from '../services/storageService.js';
 import { formatPercentInput } from '../utils/format.js';

@@ -26,6 +26,7 @@ export async function initializeStorageService() {
   const savedMode = localStorage.getItem(STORAGE_MODE_KEY);
   activeMode = savedMode === STORAGE_MODES.FILE ? STORAGE_MODES.FILE : STORAGE_MODES.BROWSER;
   activeFileName = localStorage.getItem(STORAGE_FILE_NAME_KEY) || '';
+  activeFileHandle = null;
   filePermissionWarning = '';
 
   if (activeMode !== STORAGE_MODES.FILE) return;
@@ -37,23 +38,32 @@ export async function initializeStorageService() {
   }
 
   try {
-    activeFileHandle = await readFileHandleFromIndexedDb();
+    const savedHandle = await readFileHandleFromIndexedDb();
 
-    if (!activeFileHandle) {
+    if (!savedHandle) {
       filePermissionWarning = '找不到先前連結的本機 JSON 檔案，請重新連結。';
       activeMode = STORAGE_MODES.BROWSER;
       return;
     }
 
-    const hasPermission = await requestFilePermission(activeFileHandle, 'readwrite');
-    if (!hasPermission) {
-      filePermissionWarning = '沒有本機 JSON 檔案讀寫權限，請重新連結或改用瀏覽器儲存。';
+    // 重新整理頁面時，瀏覽器可能把本機檔案權限重設為 prompt。
+    // requestPermission 必須由使用者點擊觸發，不能在初始化時自動呼叫，
+    // 否則 Chrome / Edge 會丟出 SecurityError，造成「初始化失敗」提示。
+    const permission = await savedHandle.queryPermission({ mode: 'readwrite' });
+
+    if (permission !== 'granted') {
+      filePermissionWarning = '本機 JSON 檔案需要重新授權，請點「儲存方式」→「讀取既有 JSON 存檔」。目前暫時使用瀏覽器儲存。';
       activeMode = STORAGE_MODES.BROWSER;
+      return;
     }
+
+    activeFileHandle = savedHandle;
+    activeFileName = savedHandle.name || activeFileName || 'level-tracker-save.json';
   } catch (error) {
-    console.warn('File storage initialization failed:', error);
-    filePermissionWarning = '本機 JSON 檔案儲存初始化失敗，已暫時改用瀏覽器儲存。';
+    console.warn('File storage handle restore failed:', error);
+    filePermissionWarning = '本機 JSON 檔案連結已失效，請重新連結。已暫時改用瀏覽器儲存。';
     activeMode = STORAGE_MODES.BROWSER;
+    activeFileHandle = null;
   }
 }
 

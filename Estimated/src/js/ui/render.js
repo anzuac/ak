@@ -281,7 +281,7 @@ export function renderRecords(state) {
     return;
   }
 
-  const groups = calculateDailyRows(state.goal, state.records);
+  const groups = calculateDailyRows(state.goal, state.records).toReversed();
 
   for (const group of groups) {
     const fragment = elements.recordRowTemplate.content.cloneNode(true);

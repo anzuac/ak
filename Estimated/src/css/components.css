@@ -218,6 +218,18 @@
   border-radius: var(--radius-lg);
 }
 
+.records-table-wrap {
+  max-height: min(70vh, 1180px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.records-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
 table {
   width: 100%;
   min-width: 1080px;
