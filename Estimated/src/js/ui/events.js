@@ -8,6 +8,7 @@ import { clearStorage, createFileStorage, exportStateAsJson, getStorageInfo, imp
 import { formatPercentInput } from '../utils/format.js';
 
 let goalAutoSaveTimer = 0;
+let lastStorageWarning = "";
 
 export function registerEvents() {
   elements.goalForm.addEventListener('submit', event => {
@@ -406,13 +407,19 @@ export function updateStorageStatus() {
 
   if (info.mode === 'file') {
     elements.storageModeBadge.textContent = `本機 JSON：${info.fileName || '已連結'}`;
-    elements.storageModeBadge.title = '資料會寫入你選擇的本機 JSON 檔案';
+    elements.storageModeBadge.title = '資料會同時保存到瀏覽器快取與你選擇的本機 JSON 檔案';
+  } else if (info.reconnectRequired && info.preferredMode === 'file') {
+    elements.storageModeBadge.textContent = `本機 JSON 待授權${info.fileName ? `：${info.fileName}` : ''}`;
+    elements.storageModeBadge.title = info.warning || '目前先使用瀏覽器快取；點儲存方式可重新授權或讀取 JSON';
   } else {
     elements.storageModeBadge.textContent = '瀏覽器儲存';
     elements.storageModeBadge.title = info.warning || '資料保存在目前瀏覽器 localStorage';
   }
 
-  if (info.warning) showToast(info.warning);
+  if (info.warning && info.warning !== lastStorageWarning) {
+    lastStorageWarning = info.warning;
+    showToast(info.warning);
+  }
 
   if (elements.createFileStorageButton) {
     elements.createFileStorageButton.disabled = !isFileSystemStorageSupported();
@@ -438,7 +445,7 @@ async function handleCreateFileStorage() {
 
 async function handleOpenFileStorage() {
   await runStorageAction(async () => {
-    const importedState = await openFileStorage();
+    const importedState = await openFileStorage(getState());
 
     if (importedState) {
       setState(importedState);

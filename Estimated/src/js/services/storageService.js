@@ -12,8 +12,10 @@ export const STORAGE_MODES = Object.freeze({
 
 let activeMode = STORAGE_MODES.BROWSER;
 let activeFileHandle = null;
+let rememberedFileHandle = null;
 let activeFileName = '';
 let filePermissionWarning = '';
+let fileReconnectRequired = false;
 
 export function isFileSystemStorageSupported() {
   return typeof window !== 'undefined'
@@ -24,46 +26,48 @@ export function isFileSystemStorageSupported() {
 
 export async function initializeStorageService() {
   const savedMode = localStorage.getItem(STORAGE_MODE_KEY);
-  activeMode = savedMode === STORAGE_MODES.FILE ? STORAGE_MODES.FILE : STORAGE_MODES.BROWSER;
-  activeFileName = localStorage.getItem(STORAGE_FILE_NAME_KEY) || '';
+  activeMode = STORAGE_MODES.BROWSER;
   activeFileHandle = null;
+  rememberedFileHandle = null;
+  activeFileName = localStorage.getItem(STORAGE_FILE_NAME_KEY) || '';
   filePermissionWarning = '';
+  fileReconnectRequired = false;
 
-  if (activeMode !== STORAGE_MODES.FILE) return;
+  if (savedMode !== STORAGE_MODES.FILE) return;
 
   if (!isFileSystemStorageSupported()) {
-    filePermissionWarning = '此瀏覽器不支援本機 JSON 檔案儲存，已暫時改用瀏覽器儲存。';
-    activeMode = STORAGE_MODES.BROWSER;
+    filePermissionWarning = '此瀏覽器不支援本機 JSON 檔案同步，已使用瀏覽器快取。';
+    fileReconnectRequired = false;
     return;
   }
 
   try {
     const savedHandle = await readFileHandleFromIndexedDb();
+    rememberedFileHandle = savedHandle || null;
 
     if (!savedHandle) {
-      filePermissionWarning = '找不到先前連結的本機 JSON 檔案，請重新連結。';
-      activeMode = STORAGE_MODES.BROWSER;
+      filePermissionWarning = '找不到先前連結的本機 JSON 檔案，已使用瀏覽器快取。需要時可重新讀取 JSON。';
+      fileReconnectRequired = true;
       return;
     }
 
-    // 重新整理頁面時，瀏覽器可能把本機檔案權限重設為 prompt。
-    // requestPermission 必須由使用者點擊觸發，不能在初始化時自動呼叫，
-    // 否則 Chrome / Edge 會丟出 SecurityError，造成「初始化失敗」提示。
     const permission = await savedHandle.queryPermission({ mode: 'readwrite' });
 
     if (permission !== 'granted') {
-      filePermissionWarning = '本機 JSON 檔案需要重新授權，請點「儲存方式」→「讀取既有 JSON 存檔」。目前暫時使用瀏覽器儲存。';
-      activeMode = STORAGE_MODES.BROWSER;
+      filePermissionWarning = '本機 JSON 檔案需要重新授權，目前先使用瀏覽器快取。';
+      fileReconnectRequired = true;
+      activeFileName = savedHandle.name || activeFileName || 'level-tracker-save.json';
       return;
     }
 
+    activeMode = STORAGE_MODES.FILE;
     activeFileHandle = savedHandle;
     activeFileName = savedHandle.name || activeFileName || 'level-tracker-save.json';
+    fileReconnectRequired = false;
   } catch (error) {
     console.warn('File storage handle restore failed:', error);
-    filePermissionWarning = '本機 JSON 檔案連結已失效，請重新連結。已暫時改用瀏覽器儲存。';
-    activeMode = STORAGE_MODES.BROWSER;
-    activeFileHandle = null;
+    filePermissionWarning = '本機 JSON 檔案連結暫時無法使用，已使用瀏覽器快取。';
+    fileReconnectRequired = true;
   }
 }
 
@@ -72,12 +76,20 @@ export function hasStorageChoice() {
     || localStorage.getItem(STORAGE_MODE_KEY) === STORAGE_MODES.FILE;
 }
 
+export function needsFileReconnect() {
+  return fileReconnectRequired;
+}
+
 export function getStorageInfo() {
+  const preferredMode = localStorage.getItem(STORAGE_MODE_KEY) || STORAGE_MODES.BROWSER;
+
   return {
     mode: activeMode,
+    preferredMode,
     fileName: activeFileName,
     isFileSupported: isFileSystemStorageSupported(),
     warning: filePermissionWarning,
+    reconnectRequired: fileReconnectRequired,
   };
 }
 
@@ -85,10 +97,17 @@ export async function loadStateFromStorage() {
   if (activeMode === STORAGE_MODES.FILE && activeFileHandle) {
     try {
       const fileState = await readStateFromFile(activeFileHandle);
-      if (fileState) return fileState;
+      if (fileState) {
+        saveStateToBrowserStorage(fileState);
+        return fileState;
+      }
     } catch (error) {
       console.warn('File storage read failed:', error);
-      filePermissionWarning = '讀取本機 JSON 存檔失敗，請重新連結檔案。';
+      filePermissionWarning = '讀取本機 JSON 存檔失敗，已改用瀏覽器快取。';
+      fileReconnectRequired = true;
+      rememberedFileHandle = activeFileHandle;
+      activeFileHandle = null;
+      activeMode = STORAGE_MODES.BROWSER;
     }
   }
 
@@ -96,27 +115,46 @@ export async function loadStateFromStorage() {
 }
 
 export async function saveStateToStorage(state) {
-  if (activeMode === STORAGE_MODES.FILE && activeFileHandle) {
-    await writeStateToFile(activeFileHandle, state);
-    return;
-  }
-
+  // 瀏覽器快取永遠保留，作為本機 JSON 權限失效或檔案遺失時的保險。
   saveStateToBrowserStorage(state);
+
+  if (activeMode !== STORAGE_MODES.FILE || !activeFileHandle) return;
+
+  try {
+    await writeStateToFile(activeFileHandle, state);
+    filePermissionWarning = '';
+    fileReconnectRequired = false;
+  } catch (error) {
+    console.warn('File storage write failed:', error);
+    rememberedFileHandle = activeFileHandle;
+    activeFileHandle = null;
+    activeMode = STORAGE_MODES.BROWSER;
+    fileReconnectRequired = true;
+    filePermissionWarning = '本機 JSON 寫入失敗，資料已先保存到瀏覽器快取。請重新授權或重新讀取 JSON 檔。';
+  }
 }
 
 export async function clearStorage() {
   localStorage.removeItem(STORAGE_KEY);
 
   if (activeMode === STORAGE_MODES.FILE && activeFileHandle) {
-    await writeStateToFile(activeFileHandle, { goal: null, records: [] });
+    try {
+      await writeStateToFile(activeFileHandle, { goal: null, records: [] });
+    } catch (error) {
+      console.warn('File storage clear failed:', error);
+      filePermissionWarning = '本機 JSON 清除失敗，但瀏覽器快取已清除。';
+      fileReconnectRequired = true;
+    }
   }
 }
 
 export async function useBrowserStorage(state) {
   activeMode = STORAGE_MODES.BROWSER;
   activeFileHandle = null;
+  rememberedFileHandle = null;
   activeFileName = '';
   filePermissionWarning = '';
+  fileReconnectRequired = false;
 
   localStorage.setItem(STORAGE_MODE_KEY, STORAGE_MODES.BROWSER);
   localStorage.removeItem(STORAGE_FILE_NAME_KEY);
@@ -144,21 +182,39 @@ export async function createFileStorage(state) {
   const hasPermission = await requestFilePermission(handle, 'readwrite');
   if (!hasPermission) throw new Error('未取得本機 JSON 檔案讀寫權限');
 
+  const nextState = state ?? { goal: null, records: [] };
+
   activeMode = STORAGE_MODES.FILE;
   activeFileHandle = handle;
+  rememberedFileHandle = handle;
   activeFileName = handle.name || 'level-tracker-save.json';
   filePermissionWarning = '';
+  fileReconnectRequired = false;
 
   localStorage.setItem(STORAGE_MODE_KEY, STORAGE_MODES.FILE);
   localStorage.setItem(STORAGE_FILE_NAME_KEY, activeFileName);
+  saveStateToBrowserStorage(nextState);
   await writeFileHandleToIndexedDb(handle);
-  await writeStateToFile(handle, state ?? { goal: null, records: [] });
+  await writeStateToFile(handle, nextState);
 
   return getStorageInfo();
 }
 
-export async function openFileStorage() {
+export async function openFileStorage(fallbackState) {
   ensureFileSystemStorageSupport();
+
+  const savedHandle = rememberedFileHandle || await readFileHandleFromIndexedDb();
+
+  if (savedHandle) {
+    try {
+      const hasPermission = await requestFilePermission(savedHandle, 'readwrite');
+      if (hasPermission) {
+        return await activateFileHandle(savedHandle, fallbackState);
+      }
+    } catch (error) {
+      console.warn('Saved file handle reconnect failed:', error);
+    }
+  }
 
   const [handle] = await window.showOpenFilePicker({
     types: [
@@ -176,18 +232,7 @@ export async function openFileStorage() {
   const hasPermission = await requestFilePermission(handle, 'readwrite');
   if (!hasPermission) throw new Error('未取得本機 JSON 檔案讀寫權限');
 
-  const state = await readStateFromFile(handle);
-
-  activeMode = STORAGE_MODES.FILE;
-  activeFileHandle = handle;
-  activeFileName = handle.name || 'level-tracker-save.json';
-  filePermissionWarning = '';
-
-  localStorage.setItem(STORAGE_MODE_KEY, STORAGE_MODES.FILE);
-  localStorage.setItem(STORAGE_FILE_NAME_KEY, activeFileName);
-  await writeFileHandleToIndexedDb(handle);
-
-  return state;
+  return await activateFileHandle(handle, fallbackState);
 }
 
 export async function exportStateAsJson(state) {
@@ -208,6 +253,29 @@ export async function exportStateAsJson(state) {
 export async function importStateFromJsonFile(file) {
   const text = await file.text();
   return parseStorageText(text);
+}
+
+async function activateFileHandle(handle, fallbackState) {
+  const state = await readStateFromFile(handle);
+  const nextState = state ?? fallbackState ?? { goal: null, records: [] };
+
+  activeMode = STORAGE_MODES.FILE;
+  activeFileHandle = handle;
+  rememberedFileHandle = handle;
+  activeFileName = handle.name || activeFileName || 'level-tracker-save.json';
+  filePermissionWarning = '';
+  fileReconnectRequired = false;
+
+  localStorage.setItem(STORAGE_MODE_KEY, STORAGE_MODES.FILE);
+  localStorage.setItem(STORAGE_FILE_NAME_KEY, activeFileName);
+  saveStateToBrowserStorage(nextState);
+  await writeFileHandleToIndexedDb(handle);
+
+  if (!state) {
+    await writeStateToFile(handle, nextState);
+  }
+
+  return state;
 }
 
 function loadStateFromBrowserStorage() {

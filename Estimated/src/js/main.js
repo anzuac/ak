@@ -1,4 +1,4 @@
-import { hasStorageChoice, initializeStorageService, loadStateFromStorage, saveStateToStorage } from './services/storageService.js';
+import { hasStorageChoice, initializeStorageService, loadStateFromStorage, needsFileReconnect, saveStateToStorage } from './services/storageService.js';
 import { createDefaultGoal, getState, setState } from './domain/state.js';
 import { fillGoalForm, resetRecordForm, setDefaultDates } from './ui/forms.js';
 import { registerEvents, showStorageChoiceModal, updateStorageStatus } from './ui/events.js';
@@ -20,10 +20,12 @@ async function bootstrap() {
   render(state);
   updateStorageStatus();
 
+  await saveStateToStorage(state);
+
   if (!hasStorageChoice()) {
     showStorageChoiceModal({ force: true });
-  } else {
-    await saveStateToStorage(state);
+  } else if (needsFileReconnect()) {
+    showStorageChoiceModal();
   }
 }
 
