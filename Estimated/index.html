@@ -107,6 +107,8 @@
           <button class="ghost-button" type="button" id="clearRecordFormButton">清空輸入</button>
         </div>
 
+        <p class="form-hint">請輸入「本次練等／活動結束後」遊戲畫面最後顯示的等級與經驗值；不是填本次增加多少等級或多少 EXP。</p>
+
         <div class="form-grid two-cols">
           <label class="field">
             <span>日期</span>
@@ -114,18 +116,18 @@
           </label>
 
           <label class="field">
-            <span>結束等級</span>
+            <span>練等結束後等級</span>
             <input id="endLevel" type="number" inputmode="numeric" min="260" max="300" required />
-            <small>請依目標設定中的燃燒規則輸入有效等級；燃燒上限前只允許有效跳等路線。</small>
+            <small>請輸入練等或活動結束後，角色畫面顯示的等級；燃燒上限前請依有效跳等路線輸入。</small>
           </label>
 
           <label class="field">
-            <span>結束經驗</span>
+            <span>練等結束後經驗值</span>
             <div class="percent-input">
               <input id="endExp" type="text" inputmode="decimal" pattern="^100(?:\.0{0,3})?$|^\d{1,2}(?:\.\d{0,3})?$" placeholder="0～100.000" required />
               <span aria-hidden="true">%</span>
             </div>
-            <small>不用輸入 % 符號，最多小數點第三位；100 會依目前燃燒規則視為下一個有效等級 0.000%。</small>
+            <small>請輸入練等或活動結束後，角色畫面顯示的經驗百分比；不用輸入 % 符號，最多小數點第三位。</small>
           </label>
 
           <label class="field">
@@ -133,7 +135,7 @@
             <input id="minutes" type="number" inputmode="numeric" min="0" step="1" required />
           </label>
 
-          <p class="form-hint full-width">練等分鐘輸入 0 代表活動、任務、道具等其他渠道；會記錄成長，但不納入平均練等效率。</p>
+          <p class="form-hint full-width">練等分鐘填實際練等花費時間；輸入 0 代表非手動練等來源，例如怪物公園(終極)、師徒、EXP 票券、掛機、史詩副本、每日任務、每週任務等，只記錄成長，不納入平均練等效率。</p>
 
           <label class="field full-width">
             <span>備註</span>
