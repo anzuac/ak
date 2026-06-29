@@ -154,13 +154,13 @@ function addCalendarDays(date, days) {
   return nextDate;
 }
 
-function getWednesdayWeekStart(dateText) {
+function getThursdayWeekStart(dateText) {
   const date = parseRecordDate(dateText);
   if (!date) return null;
 
-  // 固定以週三為每週第一天，週三到下週二為一週。
-  const diffFromWednesday = (date.getDay() + 4) % 7;
-  return addCalendarDays(date, -diffFromWednesday);
+  // 固定以週四為每週第一天，週四到下週三為一週。
+  const diffFromThursday = (date.getDay() + 3) % 7;
+  return addCalendarDays(date, -diffFromThursday);
 }
 
 export function sortRecords(records, burningMode = BURNING_MODES.BURN_270) {
@@ -300,7 +300,7 @@ export function calculateWeeklyRows(goal, records) {
   const groups = [];
 
   for (const dayRow of dailyRows) {
-    const weekStartDate = getWednesdayWeekStart(dayRow.date);
+    const weekStartDate = getThursdayWeekStart(dayRow.date);
     if (!weekStartDate) continue;
 
     const weekEndDate = addCalendarDays(weekStartDate, 6);

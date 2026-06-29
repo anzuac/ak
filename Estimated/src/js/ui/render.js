@@ -227,7 +227,7 @@ function renderProjectionCompletionRate(summary) {
   const weeklyText = weeklyRate > 0 ? formatPercent(weeklyRate) : '-';
   elements.projectionCompletionRate.textContent = `每日 ${dailyText}｜每週 ${weeklyText}`;
   elements.projectionCompletionRate.title = `每日平均可補足剩餘 EXP 的 ${dailyRate.toFixed(3)}%，每週平均可補足 ${weeklyRate.toFixed(3)}%`;
-  elements.projectionCompletionStatus.textContent = `到目標日前，依目前平均可補足剩餘 EXP 的比例；100% 代表可準時完成。每週平均採週三～週二彙整，共 ${summary.weekCount} 週`;
+  elements.projectionCompletionStatus.textContent = `到目標日前，依目前平均可補足剩餘 EXP 的比例；100% 代表可準時完成。每週平均採週四～週三彙整，共 ${summary.weekCount} 週`;
 
   if (Math.max(dailyRate, weeklyRate) >= 100) {
     elements.projectionCompletionRate.classList.add('status-good');
