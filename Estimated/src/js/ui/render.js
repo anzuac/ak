@@ -1,7 +1,7 @@
 import { elements } from './dom.js';
 import { formatDateTime } from '../utils/date.js';
 import { formatBasisPoints, formatBigInt, formatCompactExp, formatDailyHours, formatDecimalHoursPerDay, formatExpRate, formatHoursOnly, formatPercent } from '../utils/format.js';
-import { calculateDailyRows, calculateSummary } from '../domain/calculator.js';
+import { calculateDailyRows, calculateSummary, calculateWeeklyRows } from '../domain/calculator.js';
 
 const clearClass = element => {
   element.classList.remove('status-good', 'status-warn', 'status-bad');
@@ -10,6 +10,7 @@ const clearClass = element => {
 export function render(state) {
   renderStats(state);
   renderRecords(state);
+  renderWeeklyRecords(state);
   renderDeviceMode();
 }
 
@@ -41,6 +42,8 @@ export function renderStats(state) {
   elements.estimateTime.title = summary.avgExpPerHour > 0 ? `${summary.estimateHours.toFixed(3)} 小時` : '';
   renderProjectedFinish(summary);
   renderTotalExpProjectedFinish(summary);
+  renderSevenDayProjectedFinish(summary);
+  renderProjectionCompletionRate(summary);
   elements.requiredSpeed.textContent = summary.deadlineDays > 0 ? `${formatCompactExp(summary.requiredExpPerDay)} EXP / 日` : '-';
   elements.requiredSpeed.title = summary.deadlineDays > 0 ? `${formatExpRate(summary.requiredExpPerDay)} EXP / 日` : '';
 
@@ -145,6 +148,97 @@ function renderTotalExpProjectedFinish(summary) {
   elements.totalExpProjectedFinishStatus.classList.add('status-warn');
 }
 
+
+function renderSevenDayProjectedFinish(summary) {
+  clearClass(elements.sevenDayProjectedFinishStatus);
+  clearClass(elements.sevenDayProjectedFinishDate);
+
+  if (!elements.sevenDayProjectedFinishDate || !elements.sevenDayProjectedFinishStatus) return;
+
+  if (summary.remaining === 0n) {
+    elements.sevenDayProjectedFinishDate.textContent = '已達成';
+    elements.sevenDayProjectedFinishStatus.textContent = '目標已完成';
+    elements.sevenDayProjectedFinishStatus.classList.add('status-good');
+    elements.sevenDayProjectedFinishDate.classList.add('status-good');
+    return;
+  }
+
+  if (summary.weekCount <= 0 || summary.avgWeeklyExpPerDay <= 0 || !summary.weeklyProjectedFinishDate) {
+    elements.sevenDayProjectedFinishDate.textContent = '-';
+    elements.sevenDayProjectedFinishStatus.textContent = '新增每週累積資料後，會以每週總獲得 ÷ 7 推算';
+    elements.sevenDayProjectedFinishStatus.classList.add('status-warn');
+    return;
+  }
+
+  elements.sevenDayProjectedFinishDate.textContent = formatDateTime(summary.weeklyProjectedFinishDate);
+  elements.sevenDayProjectedFinishDate.title = `每週平均 ${formatExpRate(summary.avgWeeklyExpPerWeek)} EXP / 週，換算 ${formatExpRate(summary.avgWeeklyExpPerDay)} EXP / 日`;
+  elements.sevenDayProjectedFinishStatus.textContent = `依 ${summary.weekCount} 週平均 ${formatCompactExp(summary.avgWeeklyExpPerWeek)} EXP / 週，換算每日 ${formatCompactExp(summary.avgWeeklyExpPerDay)} EXP，約 ${summary.weeklyEstimatedCalendarDays.toFixed(1)} 天後完成`;
+
+  if (summary.deadline instanceof Date && !Number.isNaN(summary.deadline.getTime())) {
+    if (summary.weeklyProjectedFinishDate.getTime() > summary.deadline.getTime()) {
+      elements.sevenDayProjectedFinishStatus.textContent += `，預估超過目標時間 ${formatDateTime(summary.deadline)}`;
+      elements.sevenDayProjectedFinishStatus.classList.add('status-warn');
+      elements.sevenDayProjectedFinishDate.classList.add('status-warn');
+      return;
+    }
+
+    elements.sevenDayProjectedFinishStatus.textContent += '，可在目標時間前完成';
+    elements.sevenDayProjectedFinishStatus.classList.add('status-good');
+    elements.sevenDayProjectedFinishDate.classList.add('status-good');
+    return;
+  }
+
+  elements.sevenDayProjectedFinishStatus.classList.add('status-warn');
+}
+
+
+function renderProjectionCompletionRate(summary) {
+  if (!elements.projectionCompletionRate || !elements.projectionCompletionStatus) return;
+
+  clearClass(elements.projectionCompletionRate);
+  clearClass(elements.projectionCompletionStatus);
+
+  if (summary.remaining === 0n) {
+    elements.projectionCompletionRate.textContent = '已達成';
+    elements.projectionCompletionStatus.textContent = '目標已完成';
+    elements.projectionCompletionRate.classList.add('status-good');
+    elements.projectionCompletionStatus.classList.add('status-good');
+    return;
+  }
+
+  if (summary.deadlineDays <= 0) {
+    elements.projectionCompletionRate.textContent = '-';
+    elements.projectionCompletionStatus.textContent = '已超過目標時間，無法推估期限可達成比例';
+    elements.projectionCompletionStatus.classList.add('status-bad');
+    return;
+  }
+
+  const dailyRate = summary.dailyDeadlineCompletionRate || 0;
+  const weeklyRate = summary.weeklyDeadlineCompletionRate || 0;
+
+  if (dailyRate <= 0 && weeklyRate <= 0) {
+    elements.projectionCompletionRate.textContent = '-';
+    elements.projectionCompletionStatus.textContent = '新增每日或每週紀錄後才會推估';
+    elements.projectionCompletionStatus.classList.add('status-warn');
+    return;
+  }
+
+  const dailyText = dailyRate > 0 ? formatPercent(dailyRate) : '-';
+  const weeklyText = weeklyRate > 0 ? formatPercent(weeklyRate) : '-';
+  elements.projectionCompletionRate.textContent = `每日 ${dailyText}｜每週 ${weeklyText}`;
+  elements.projectionCompletionRate.title = `每日平均可補足剩餘 EXP 的 ${dailyRate.toFixed(3)}%，每週平均可補足 ${weeklyRate.toFixed(3)}%`;
+  elements.projectionCompletionStatus.textContent = `到目標日前，依目前平均可補足剩餘 EXP 的比例；100% 代表可準時完成。每週平均採週三～週二彙整，共 ${summary.weekCount} 週`;
+
+  if (Math.max(dailyRate, weeklyRate) >= 100) {
+    elements.projectionCompletionRate.classList.add('status-good');
+    elements.projectionCompletionStatus.classList.add('status-good');
+    return;
+  }
+
+  elements.projectionCompletionRate.classList.add('status-warn');
+  elements.projectionCompletionStatus.classList.add('status-warn');
+}
+
 function getProjectedFinishUnavailableText(summary) {
   if (summary.remaining === 0n) {
     return {
@@ -198,6 +292,10 @@ function setEmptyStats() {
     elements.projectedFinishStatus,
     elements.totalExpProjectedFinishDate,
     elements.totalExpProjectedFinishStatus,
+    elements.sevenDayProjectedFinishDate,
+    elements.sevenDayProjectedFinishStatus,
+    elements.projectionCompletionRate,
+    elements.projectionCompletionStatus,
     elements.requiredSpeed,
     elements.speedStatus,
     elements.requiredDailyHours,
@@ -213,6 +311,10 @@ function setEmptyStats() {
   clearClass(elements.projectedFinishStatus);
   clearClass(elements.totalExpProjectedFinishDate);
   clearClass(elements.totalExpProjectedFinishStatus);
+  clearClass(elements.sevenDayProjectedFinishDate);
+  clearClass(elements.sevenDayProjectedFinishStatus);
+  clearClass(elements.projectionCompletionRate);
+  clearClass(elements.projectionCompletionStatus);
   elements.progressFill.style.width = '0%';
 }
 
@@ -281,7 +383,7 @@ export function renderRecords(state) {
     return;
   }
 
-  const groups = calculateDailyRows(state.goal, state.records).toReversed();
+  const groups = [...calculateDailyRows(state.goal, state.records)].reverse();
 
   for (const group of groups) {
     const fragment = elements.recordRowTemplate.content.cloneNode(true);
@@ -368,6 +470,43 @@ function renderDailyEntryList(detailTr, rows) {
     item.append(actionTd);
 
     entryList.append(item);
+  }
+}
+
+
+export function renderWeeklyRecords(state) {
+  if (!elements.weeklyRecordList) return;
+
+  elements.weeklyRecordList.replaceChildren();
+
+  if (!state.goal || state.records.length === 0) {
+    const emptyRow = elements.emptyWeeklyTemplate.content.cloneNode(true);
+    elements.weeklyRecordList.append(emptyRow);
+    return;
+  }
+
+  const groups = [...calculateWeeklyRows(state.goal, state.records)].reverse();
+
+  for (const group of groups) {
+    const fragment = elements.weeklyRowTemplate.content.cloneNode(true);
+    const tr = fragment.querySelector('tr');
+    const noteText = group.notes.length > 0 ? group.notes.join('、') : '-';
+    const otherText = group.otherGainedExp > 0n ? `${formatCompactExp(group.otherGainedExp)} EXP` : '-';
+
+    tr.querySelector('[data-week="range"]').textContent = group.rangeText;
+    tr.querySelector('[data-week="endProgress"]').textContent = `${group.endRecord.endLevel} 等 ${formatBasisPoints(group.endRecord.endExpBp)}%`;
+    tr.querySelector('[data-week="gainedExp"]').textContent = `${formatCompactExp(group.gainedExp)} EXP`;
+    tr.querySelector('[data-week="gainedExp"]').title = `${formatBigInt(group.gainedExp)} EXP`;
+    tr.querySelector('[data-week="minutes"]').textContent = `${Number(group.minutes).toLocaleString('en-US')} 分`;
+    tr.querySelector('[data-week="expPerHour"]').textContent = group.minutes > 0 ? `${formatCompactExp(group.expPerHour)} EXP` : '不納入';
+    tr.querySelector('[data-week="expPerHour"]').title = group.minutes > 0 ? `${formatExpRate(group.expPerHour)} EXP / 小時` : '本週沒有練等分鐘';
+    tr.querySelector('[data-week="otherExp"]').textContent = otherText;
+    tr.querySelector('[data-week="otherExp"]').title = group.otherGainedExp > 0n ? `${formatBigInt(group.otherGainedExp)} EXP` : '';
+    tr.querySelector('[data-week="count"]').textContent = `${group.dayCount} 天 / ${group.entryCount} 筆`;
+    tr.querySelector('[data-week="note"]').textContent = noteText;
+    tr.querySelector('[data-week="note"]').title = noteText;
+
+    elements.weeklyRecordList.append(fragment);
   }
 }
 

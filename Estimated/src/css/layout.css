@@ -99,3 +99,59 @@
 .records-panel {
   margin-top: 18px;
 }
+
+.dashboard-section {
+  border-radius: var(--radius-xl);
+  padding: 22px;
+  margin-top: 18px;
+}
+
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.section-title-row h2 {
+  margin-top: 6px;
+  font-size: 1.35rem;
+}
+
+.section-title-row .muted-text {
+  max-width: 520px;
+  text-align: right;
+}
+
+.core-summary {
+  margin-top: 18px;
+}
+
+.stat-grid-core,
+.stat-grid-analysis {
+  margin: 0;
+}
+
+.projection-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.projection-layout .dashboard-section {
+  margin-top: 0;
+}
+
+.stat-grid-analysis {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-title-row {
+  min-height: 94px;
+}
+
+.weekly-panel {
+  margin-top: 18px;
+}

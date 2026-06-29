@@ -134,3 +134,35 @@
     min-height: auto;
   }
 }
+
+@media (max-width: 1180px) {
+  .projection-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-title-row {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-section {
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .section-title-row,
+  .compact-title-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .section-title-row .muted-text {
+    max-width: none;
+    text-align: left;
+  }
+
+  .stat-grid-analysis {
+    grid-template-columns: 1fr;
+  }
+}

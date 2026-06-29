@@ -147,72 +147,148 @@
       </form>
     </section>
 
-    <section class="stat-grid" aria-label="進度統計">
-      <article class="stat-card highlight-card">
-        <span>目前進度</span>
-        <strong id="currentProgress">-</strong>
-        <small id="currentTotalExp">-</small>
-      </article>
+    <section class="glass-panel dashboard-section core-summary" aria-label="核心進度總覽">
+      <div class="section-title-row">
+        <div>
+          <p class="eyebrow">OVERVIEW</p>
+          <h2>核心進度</h2>
+        </div>
+        <p class="muted-text">只顯示目前狀態與目標差距，方便快速確認進度。</p>
+      </div>
 
-      <article class="stat-card">
-        <span>距離目標</span>
-        <strong id="remainingExp">-</strong>
-        <small>以實際 EXP 計算</small>
-      </article>
+      <div class="stat-grid stat-grid-core">
+        <article class="stat-card highlight-card">
+          <span>目前進度</span>
+          <strong id="currentProgress">-</strong>
+          <small id="currentTotalExp">-</small>
+        </article>
 
-      <article class="stat-card progress-card">
-        <span>完成比例</span>
-        <strong id="completeRate">-</strong>
-        <div class="progress-track" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div>
-      </article>
+        <article class="stat-card">
+          <span>距離目標</span>
+          <strong id="remainingExp">-</strong>
+          <small>以實際 EXP 計算</small>
+        </article>
 
-      <article class="stat-card">
-        <span>累積時間</span>
-        <strong id="totalMinutes">-</strong>
-        <small id="recordCount">-</small>
-      </article>
+        <article class="stat-card progress-card">
+          <span>完成比例</span>
+          <strong id="completeRate">-</strong>
+          <div class="progress-track" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div>
+        </article>
 
-      <article class="stat-card">
-        <span>平均效率</span>
-        <strong id="avgPerHour">-</strong>
-        <small>EXP / 小時</small>
-      </article>
+        <article class="stat-card">
+          <span>累積時間</span>
+          <strong id="totalMinutes">-</strong>
+          <small id="recordCount">-</small>
+        </article>
+      </div>
+    </section>
 
-      <article class="stat-card">
-        <span>每日平均練等</span>
-        <strong id="averageDailyHours">-</strong>
-        <small id="averageDailyHourStatus">尚無紀錄時使用預設值</small>
-      </article>
+    <section class="projection-layout" aria-label="效率與完成推估">
+      <section class="glass-panel dashboard-section projection-panel training-projection">
+        <div class="section-title-row compact-title-row">
+          <div>
+            <p class="eyebrow">TRAINING</p>
+            <h2>練等效率推估</h2>
+          </div>
+          <p class="muted-text">只使用有填練等分鐘的紀錄，0 分鐘其他渠道不納入效率。</p>
+        </div>
 
-      <article class="stat-card">
-        <span>剩餘需練時數</span>
-        <strong id="estimateTime">-</strong>
-        <small>純練等時數，只顯示小時，不換算成天數</small>
-      </article>
+        <div class="stat-grid stat-grid-analysis training-stat-grid">
+          <article class="stat-card">
+            <span>平均效率</span>
+            <strong id="avgPerHour">-</strong>
+            <small>EXP / 小時</small>
+          </article>
 
-      <article class="stat-card projected-card">
-        <span>預估完成日</span>
-        <strong id="projectedFinishDate">-</strong>
-        <small id="projectedFinishStatus">依每日平均練等時間推算，超過目標時間會以警告顯示</small>
-      </article>
+          <article class="stat-card">
+            <span>目標每日 EXP</span>
+            <strong id="requiredSpeed">-</strong>
+            <small id="speedStatus">平均每天需要多少 EXP 才能準時達成</small>
+          </article>
 
-      <article class="stat-card projected-card">
-        <span>總 EXP 預估完成</span>
-        <strong id="totalExpProjectedFinishDate">-</strong>
-        <small id="totalExpProjectedFinishStatus">依每日總獲得 EXP 推算，包含練等與其他渠道</small>
-      </article>
+          <article class="stat-card">
+            <span>每日平均練等</span>
+            <strong id="averageDailyHours">-</strong>
+            <small id="averageDailyHourStatus">尚無紀錄時使用預設值</small>
+          </article>
 
-      <article class="stat-card">
-        <span>目標每日 EXP</span>
-        <strong id="requiredSpeed">-</strong>
-        <small id="speedStatus">-</small>
-      </article>
+          <article class="stat-card">
+            <span>依效率每日需練</span>
+            <strong id="requiredDailyHours">-</strong>
+            <small id="dailyHourStatus">用目前平均 EXP / 小時計算</small>
+          </article>
 
-      <article class="stat-card">
-        <span>依目前效率每日需練</span>
-        <strong id="requiredDailyHours">-</strong>
-        <small id="dailyHourStatus">用目前平均 EXP / 小時計算</small>
-      </article>
+          <article class="stat-card">
+            <span>剩餘需練時數</span>
+            <strong id="estimateTime">-</strong>
+            <small>純練等時數，只顯示小時，不換算成天數</small>
+          </article>
+
+          <article class="stat-card projected-card emphasis-card">
+            <span>預估完成日</span>
+            <strong id="projectedFinishDate">-</strong>
+            <small id="projectedFinishStatus">依每日平均練等時間推算，超過目標時間會以警告顯示</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="glass-panel dashboard-section projection-panel total-projection">
+        <div class="section-title-row compact-title-row">
+          <div>
+            <p class="eyebrow">TOTAL EXP</p>
+            <h2>總成長推估</h2>
+          </div>
+          <p class="muted-text">包含練等、活動、任務、道具等所有 EXP 成長。</p>
+        </div>
+
+        <div class="stat-grid stat-grid-analysis total-stat-grid">
+          <article class="stat-card projected-card emphasis-card">
+            <span>總 EXP 預估完成</span>
+            <strong id="totalExpProjectedFinishDate">-</strong>
+            <small id="totalExpProjectedFinishStatus">依每日總獲得 EXP 推算，包含練等與其他渠道</small>
+          </article>
+
+          <article class="stat-card projected-card">
+            <span>每週平均預估完成</span>
+            <strong id="sevenDayProjectedFinishDate">-</strong>
+            <small id="sevenDayProjectedFinishStatus">依週三～週二每週總獲得 ÷ 7 推算</small>
+          </article>
+
+          <article class="stat-card projected-card">
+            <span>期限可達成比例</span>
+            <strong id="projectionCompletionRate">-</strong>
+            <small id="projectionCompletionStatus">到目標日前，依目前平均可補足剩餘 EXP 的比例</small>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <section class="glass-panel records-panel weekly-panel">
+      <div class="panel-title-row record-header-row">
+        <div>
+          <p class="eyebrow">WEEKLY</p>
+          <h2>每週累積</h2>
+        </div>
+        <p class="muted-text">週期固定為週三到下週二；最新週在最上方，方便看每週總成長。</p>
+      </div>
+
+      <div class="table-wrap weekly-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>週期</th>
+              <th>週末進度</th>
+              <th>週總獲得</th>
+              <th>練等分鐘</th>
+              <th>練等效率</th>
+              <th>其他渠道</th>
+              <th>紀錄數</th>
+              <th>備註</th>
+            </tr>
+          </thead>
+          <tbody id="weeklyRecordList"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="glass-panel records-panel">
@@ -244,6 +320,25 @@
       </div>
     </section>
   </main>
+
+  <template id="emptyWeeklyTemplate">
+    <tr>
+      <td colspan="8" class="empty-cell">尚無每週累積資料，新增每日紀錄後會自動彙整。</td>
+    </tr>
+  </template>
+
+  <template id="weeklyRowTemplate">
+    <tr class="weekly-row">
+      <td data-week="range"></td>
+      <td data-week="endProgress"></td>
+      <td class="compact-exp-cell" data-week="gainedExp"></td>
+      <td data-week="minutes"></td>
+      <td class="compact-exp-cell" data-week="expPerHour"></td>
+      <td class="compact-exp-cell" data-week="otherExp"></td>
+      <td data-week="count"></td>
+      <td data-week="note"></td>
+    </tr>
+  </template>
 
   <template id="emptyRecordTemplate">
     <tr>

@@ -133,6 +133,36 @@ function getTimeForSort(value) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function parseRecordDate(dateText) {
+  const [year, month, day] = String(dateText || '').split('-').map(Number);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+function toDateKey(date) {
+  const pad = value => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function addCalendarDays(date, days) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+}
+
+function getWednesdayWeekStart(dateText) {
+  const date = parseRecordDate(dateText);
+  if (!date) return null;
+
+  // 固定以週三為每週第一天，週三到下週二為一週。
+  const diffFromWednesday = (date.getDay() + 4) % 7;
+  return addCalendarDays(date, -diffFromWednesday);
+}
+
 export function sortRecords(records, burningMode = BURNING_MODES.BURN_270) {
   return [...records].sort((a, b) => {
     const dateResult = getTimeForSort(a.date) - getTimeForSort(b.date);
@@ -264,6 +294,136 @@ export function calculateDailyRows(goal, records) {
   return groups;
 }
 
+
+export function calculateWeeklyRows(goal, records) {
+  const dailyRows = calculateDailyRows(goal, records);
+  const groups = [];
+
+  for (const dayRow of dailyRows) {
+    const weekStartDate = getWednesdayWeekStart(dayRow.date);
+    if (!weekStartDate) continue;
+
+    const weekEndDate = addCalendarDays(weekStartDate, 6);
+    const weekStart = toDateKey(weekStartDate);
+    const weekEnd = toDateKey(weekEndDate);
+    const key = `week-${weekStart}`;
+
+    let group = groups.at(-1);
+
+    if (!group || group.key !== key) {
+      group = {
+        key,
+        weekStart,
+        weekEnd,
+        rangeText: `${weekStart} ～ ${weekEnd}`,
+        dailyRows: [],
+        firstPreviousTotal: dayRow.firstPreviousTotal,
+        currentTotal: dayRow.currentTotal,
+        currentNeed: dayRow.currentNeed,
+        endRecord: dayRow.endRecord,
+        gainedExp: 0n,
+        trainingGainedExp: 0n,
+        otherGainedExp: 0n,
+        minutes: 0,
+        dayCount: 0,
+        entryCount: 0,
+        otherEntryCount: 0,
+        notes: [],
+        expPerHour: 0,
+        percentPerHour: 0,
+      };
+      groups.push(group);
+    }
+
+    group.dailyRows.push(dayRow);
+    group.currentTotal = dayRow.currentTotal;
+    group.currentNeed = dayRow.currentNeed;
+    group.endRecord = dayRow.endRecord;
+    group.gainedExp += dayRow.gainedExp;
+    group.trainingGainedExp += dayRow.trainingGainedExp;
+    group.otherGainedExp += dayRow.otherGainedExp;
+    group.minutes += dayRow.minutes;
+    group.dayCount += 1;
+    group.entryCount += dayRow.rows.length;
+    group.otherEntryCount += dayRow.otherEntryCount;
+
+    for (const note of dayRow.notes) {
+      if (note && !group.notes.includes(note)) group.notes.push(note);
+    }
+  }
+
+  for (const group of groups) {
+    group.expPerHour = group.minutes > 0
+      ? toNumberSafe(group.trainingGainedExp) / group.minutes * 60
+      : 0;
+
+    group.percentPerHour = group.currentNeed > 0n
+      ? group.expPerHour / toNumberSafe(group.currentNeed) * 100
+      : 0;
+  }
+
+  return groups;
+}
+
+function calculateSevenDayProjectionFromDailyRows(dailyRows, remaining, now) {
+  if (!dailyRows.length || remaining <= 0n) {
+    return {
+      sevenDayWindowStart: '',
+      sevenDayWindowEnd: '',
+      sevenDayDayCount: 0,
+      sevenDayGainedExp: 0n,
+      sevenDayAvgExpPerDay: 0,
+      sevenDayEstimatedCalendarDays: 0,
+      sevenDayProjectedFinishDate: null,
+    };
+  }
+
+  const latestDate = parseRecordDate(dailyRows.at(-1).date);
+  if (!latestDate) {
+    return {
+      sevenDayWindowStart: '',
+      sevenDayWindowEnd: '',
+      sevenDayDayCount: 0,
+      sevenDayGainedExp: 0n,
+      sevenDayAvgExpPerDay: 0,
+      sevenDayEstimatedCalendarDays: 0,
+      sevenDayProjectedFinishDate: null,
+    };
+  }
+
+  const windowStartDate = addCalendarDays(latestDate, -6);
+  const windowStartTime = windowStartDate.getTime();
+  const windowEndTime = latestDate.getTime();
+
+  const windowRows = dailyRows.filter(dayRow => {
+    const rowDate = parseRecordDate(dayRow.date);
+    if (!rowDate) return false;
+    const time = rowDate.getTime();
+    return time >= windowStartTime && time <= windowEndTime;
+  });
+
+  const sevenDayGainedExp = windowRows.reduce((sum, dayRow) => sum + dayRow.gainedExp, 0n);
+  const sevenDayGainedNumber = toNumberSafe(sevenDayGainedExp);
+  const remainingNumber = toNumberSafe(remaining);
+  const sevenDayAvgExpPerDay = sevenDayGainedNumber > 0 ? sevenDayGainedNumber / 7 : 0;
+  const sevenDayEstimatedCalendarDays = sevenDayAvgExpPerDay > 0 && remainingNumber > 0
+    ? remainingNumber / sevenDayAvgExpPerDay
+    : 0;
+  const sevenDayProjectedFinishDate = sevenDayEstimatedCalendarDays > 0
+    ? new Date(now.getTime() + sevenDayEstimatedCalendarDays * 24 * 60 * 60 * 1000)
+    : null;
+
+  return {
+    sevenDayWindowStart: toDateKey(windowStartDate),
+    sevenDayWindowEnd: toDateKey(latestDate),
+    sevenDayDayCount: windowRows.length,
+    sevenDayGainedExp,
+    sevenDayAvgExpPerDay,
+    sevenDayEstimatedCalendarDays,
+    sevenDayProjectedFinishDate,
+  };
+}
+
 export function calculateSummary(goal, records, now = new Date()) {
   if (!goal) return null;
 
@@ -283,6 +443,8 @@ export function calculateSummary(goal, records, now = new Date()) {
   const completed = currentTotal - startTotal;
   const remaining = targetTotal > currentTotal ? targetTotal - currentTotal : 0n;
   const rows = calculateRows(goal, sortedRecords);
+  const dailyRows = calculateDailyRows(goal, sortedRecords);
+  const weeklyRows = calculateWeeklyRows(goal, sortedRecords);
   const trainingGained = rows.reduce((sum, row) => row.isTrainingEntry ? sum + row.gainedExp : sum, 0n);
   const otherGained = rows.reduce((sum, row) => row.isTrainingEntry ? sum : sum + row.gainedExp, 0n);
   const totalMinutes = sortedRecords.reduce((sum, record) => {
@@ -305,6 +467,17 @@ export function calculateSummary(goal, records, now = new Date()) {
   const estimateHours = avgExpPerHour > 0 && remainingNumber > 0 ? remainingNumber / avgExpPerHour : 0;
   const completeRate = totalNeed > 0n ? completedNumber / toNumberSafe(totalNeed) * 100 : 0;
   const avgTotalExpPerDay = dayCount > 0 ? completedNumber / dayCount : 0;
+  const weekCount = weeklyRows.length;
+  const weeklyGainedExp = weeklyRows.reduce((sum, weekRow) => sum + weekRow.gainedExp, 0n);
+  const weeklyGainedNumber = toNumberSafe(weeklyGainedExp < 0n ? 0n : weeklyGainedExp);
+  const avgWeeklyExpPerWeek = weekCount > 0 ? weeklyGainedNumber / weekCount : 0;
+  const avgWeeklyExpPerDay = avgWeeklyExpPerWeek > 0 ? avgWeeklyExpPerWeek / 7 : 0;
+  const weeklyEstimatedCalendarDays = avgWeeklyExpPerDay > 0 && remainingNumber > 0
+    ? remainingNumber / avgWeeklyExpPerDay
+    : 0;
+  const weeklyProjectedFinishDate = weeklyEstimatedCalendarDays > 0
+    ? new Date(now.getTime() + weeklyEstimatedCalendarDays * 24 * 60 * 60 * 1000)
+    : null;
   const totalExpEstimatedCalendarDays = avgTotalExpPerDay > 0 && remainingNumber > 0
     ? remainingNumber / avgTotalExpPerDay
     : 0;
@@ -334,6 +507,13 @@ export function calculateSummary(goal, records, now = new Date()) {
   const requiredDailyTrainingHours = deadlineDays > 0 && avgExpPerHour > 0 && remainingNumber > 0
     ? estimateHours / deadlineDays
     : 0;
+  const dailyDeadlineCompletionRate = deadlineDays > 0 && remainingNumber > 0 && avgTotalExpPerDay > 0
+    ? (avgTotalExpPerDay * deadlineDays) / remainingNumber * 100
+    : 0;
+  const weeklyDeadlineCompletionRate = deadlineDays > 0 && remainingNumber > 0 && avgWeeklyExpPerDay > 0
+    ? (avgWeeklyExpPerDay * deadlineDays) / remainingNumber * 100
+    : 0;
+  const sevenDayProjection = calculateSevenDayProjectionFromDailyRows(dailyRows, remaining, now);
 
   return {
     startTotal,
@@ -350,11 +530,20 @@ export function calculateSummary(goal, records, now = new Date()) {
     otherRecordCount,
     recordCount: sortedRecords.length,
     dayCount,
+    dailyRows,
     trainingDayCount,
     avgExpPerHour,
     estimateHours,
     completeRate,
     avgTotalExpPerDay,
+    weekCount,
+    weeklyGainedExp,
+    avgWeeklyExpPerWeek,
+    avgWeeklyExpPerDay,
+    weeklyEstimatedCalendarDays,
+    weeklyProjectedFinishDate,
+    dailyDeadlineCompletionRate,
+    weeklyDeadlineCompletionRate,
     totalExpEstimatedCalendarDays,
     totalExpProjectedFinishDate,
     deadline,
@@ -369,5 +558,6 @@ export function calculateSummary(goal, records, now = new Date()) {
     requiredExpPerHour,
     requiredExpPerDay,
     requiredDailyTrainingHours,
+    ...sevenDayProjection,
   };
 }

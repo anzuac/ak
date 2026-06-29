@@ -633,3 +633,48 @@ tr:last-child td {
 .storage-note {
   margin-top: 16px;
 }
+
+.weekly-panel {
+  margin-top: 18px;
+}
+
+.weekly-table-wrap {
+  max-height: min(56vh, 720px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.weekly-table-wrap table {
+  min-width: 980px;
+}
+
+.weekly-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.weekly-row td:first-child {
+  font-weight: 900;
+  color: #c7d2fe;
+  white-space: nowrap;
+}
+
+.emphasis-card {
+  border-color: rgba(34, 211, 238, 0.24);
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.12), transparent 58%),
+    linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+}
+
+.training-projection {
+  background:
+    radial-gradient(circle at top left, rgba(139, 92, 246, 0.14), transparent 42%),
+    var(--panel);
+}
+
+.total-projection {
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.11), transparent 42%),
+    var(--panel);
+}
