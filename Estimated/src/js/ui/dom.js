@@ -59,6 +59,7 @@ export const elements = Object.freeze({
   changeStorageButton: $('#changeStorageButton'),
   exportBackupButton: $('#exportBackupButton'),
   importBackupButton: $('#importBackupButton'),
+  restoreBackupButton: $('#restoreBackupButton'),
   importBackupInput: $('#importBackupInput'),
   goalSaveStatus: $('#goalSaveStatus'),
   toast: $('#toast'),

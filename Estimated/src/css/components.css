@@ -678,3 +678,9 @@ tr:last-child td {
     radial-gradient(circle at top right, rgba(34, 211, 238, 0.11), transparent 42%),
     var(--panel);
 }
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  filter: grayscale(0.25);
+}

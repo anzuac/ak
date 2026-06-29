@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'level-tracker-es2022-state-v3-event-skip';
+const RESTORE_KEY = 'level-tracker-es2022-restore-points-v1';
+const MAX_RESTORE_POINTS = 3;
 
 export const STORAGE_MODES = Object.freeze({
   BROWSER: 'browser',
@@ -36,6 +38,52 @@ export async function saveStateToStorage(state) {
 
 export async function clearStorage() {
   localStorage.removeItem(STORAGE_KEY);
+}
+
+
+export function createRestorePoint(state, reason = '操作前自動還原點') {
+  const restorePoints = getRestorePoints();
+  const point = {
+    id: crypto.randomUUID(),
+    reason,
+    createdAt: new Date().toISOString(),
+    data: normalizeState(state ?? { goal: null, records: [] }),
+  };
+
+  const nextPoints = [point, ...restorePoints].slice(0, MAX_RESTORE_POINTS);
+  localStorage.setItem(RESTORE_KEY, JSON.stringify(nextPoints));
+  return point;
+}
+
+export function getRestorePoints() {
+  const raw = localStorage.getItem(RESTORE_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter(point => point && typeof point === 'object' && point.data)
+      .map(point => ({
+        id: String(point.id || crypto.randomUUID()),
+        reason: String(point.reason || '自動還原點'),
+        createdAt: String(point.createdAt || new Date().toISOString()),
+        data: normalizeState(point.data),
+      }))
+      .slice(0, MAX_RESTORE_POINTS);
+  } catch (error) {
+    console.warn('Restore point parse failed:', error);
+    return [];
+  }
+}
+
+export function getLatestRestorePoint() {
+  return getRestorePoints()[0] ?? null;
+}
+
+export function clearRestorePoints() {
+  localStorage.removeItem(RESTORE_KEY);
 }
 
 export async function exportStateAsJson(state) {

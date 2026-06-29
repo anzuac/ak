@@ -4,7 +4,7 @@ import { render, renderDeviceMode } from './render.js';
 import { showToast } from './toast.js';
 import { addRecord, clearRecords, createDefaultGoal, getState, removeRecord, resetState, setGoal, setState } from '../domain/state.js';
 import { calculateSummary, getBurningModeLabel, isValidExpBasisPoints, isValidLevel, parsePercentToBasisPoints, toTotalExp, validateRecordProgress } from '../domain/calculator.js';
-import { clearStorage, exportStateAsJson, getStorageInfo, importStateFromJsonFile, saveStateToStorage } from '../services/storageService.js';
+import { clearStorage, createRestorePoint, exportStateAsJson, getLatestRestorePoint, getStorageInfo, importStateFromJsonFile, saveStateToStorage } from '../services/storageService.js';
 import { formatPercentInput } from '../utils/format.js';
 
 let goalAutoSaveTimer = 0;
@@ -28,6 +28,7 @@ export function registerEvents() {
   elements.changeStorageButton.addEventListener('click', handleStorageInfo);
   elements.exportBackupButton.addEventListener('click', handleExportBackup);
   elements.importBackupButton.addEventListener('click', () => elements.importBackupInput.click());
+  elements.restoreBackupButton.addEventListener('click', handleRestoreBackup);
   elements.importBackupInput.addEventListener('change', handleImportBackup);
 
   elements.startExp.addEventListener('input', event => {
@@ -56,6 +57,7 @@ export function registerEvents() {
   window.addEventListener('resize', renderDeviceMode);
 
   setGoalStatus('目標設定會自動儲存', 'neutral');
+  updateRestoreButtonState();
 }
 
 function scheduleGoalAutoSave(delay = 350) {
@@ -159,6 +161,7 @@ async function handleClearRecords() {
   const ok = confirm('確定要清除所有每日紀錄嗎？目標設定會保留。');
   if (!ok) return;
 
+  createRestorePoint(getState(), '清除所有每日紀錄前');
   clearRecords();
   await persistAndRender('每日紀錄已清除');
 }
@@ -167,12 +170,14 @@ async function handleResetAll() {
   const ok = confirm('確定要重置全部資料嗎？目標設定與每日紀錄都會清除。');
   if (!ok) return;
 
+  createRestorePoint(getState(), '重置全部資料前');
   resetState();
   await clearStorage();
   fillGoalForm(createDefaultGoal());
   resetRecordForm();
   render(getState());
   setGoalStatus('已重置，修改目標設定後會自動儲存', 'warn');
+  updateRestoreButtonState();
   showToast('全部資料已重置');
 }
 
@@ -275,6 +280,8 @@ async function handleRecordListClick(event) {
     const ok = confirm(`確定要刪除 ${dayDate} 的 ${count} 筆紀錄嗎？`);
     if (!ok) return;
 
+    createRestorePoint(getState(), `刪除 ${dayDate} 每日紀錄前`);
+
     state.records
       .filter(record => record.date === dayDate)
       .forEach(record => removeRecord(record.id));
@@ -291,6 +298,7 @@ async function handleRecordListClick(event) {
   const ok = confirm('確定要刪除此筆明細嗎？');
   if (!ok) return;
 
+  createRestorePoint(getState(), '刪除單筆明細前');
   removeRecord(recordId);
   await persistAndRender('已刪除此筆明細');
 }
@@ -378,6 +386,7 @@ async function persistAndRender(message) {
 
   render(state);
   updateStorageStatus();
+  updateRestoreButtonState();
 }
 
 function handleStorageInfo() {
@@ -400,6 +409,55 @@ function formatStorageSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
+
+function updateRestoreButtonState() {
+  if (!elements.restoreBackupButton) return;
+
+  const latest = getLatestRestorePoint();
+  elements.restoreBackupButton.disabled = !latest;
+  elements.restoreBackupButton.title = latest
+    ? `可還原：${latest.reason}，建立於 ${formatRestoreTime(latest.createdAt)}`
+    : '目前沒有可還原的刪除前備份';
+}
+
+async function handleRestoreBackup() {
+  const point = getLatestRestorePoint();
+
+  if (!point) {
+    showToast('目前沒有可還原的刪除前備份');
+    updateRestoreButtonState();
+    return;
+  }
+
+  const ok = confirm(`確定要還原上次刪除前的資料嗎？\n\n還原點：${point.reason}\n時間：${formatRestoreTime(point.createdAt)}\n\n目前畫面資料會被還原點覆蓋。`);
+  if (!ok) return;
+
+  createRestorePoint(getState(), '還原前自動備份目前資料');
+  setState(point.data);
+  const state = getState();
+
+  fillGoalForm(state.goal ?? createDefaultGoal());
+  resetRecordForm();
+  await saveStateToStorage(state);
+  render(state);
+  updateStorageStatus();
+  updateRestoreButtonState();
+  setGoalStatus('已還原上次刪除前的資料', 'good');
+  showToast('已還原上次刪除前的資料');
+}
+
+function formatRestoreTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 async function handleExportBackup() {
   await exportStateAsJson(getState());
   showToast('已匯出 JSON 備份');
@@ -416,12 +474,14 @@ async function handleImportBackup(event) {
     const ok = confirm('匯入備份會覆蓋目前畫面資料，確定要繼續嗎？');
     if (!ok) return;
 
+    createRestorePoint(getState(), '匯入備份覆蓋前');
     setState(importedState);
     const state = getState();
     fillGoalForm(state.goal ?? createDefaultGoal());
     resetRecordForm();
     render(state);
     await saveStateToStorage(state);
+    updateRestoreButtonState();
     showToast('已匯入 JSON 備份');
   });
 }
